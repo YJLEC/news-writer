@@ -1,0 +1,10 @@
+机构配置包许可证记录
+
+profileId: <private-profile-id>
+profileVersion: <version>
+授权机构: <institution>
+授权范围: <internal-use-or-explicit-redistribution-scope>
+授权记录编号: <authorization-id>
+有效期: <date-or-perpetual>
+
+本记录仅授权机构写作规范、历史新闻稿、知识库和相关配置的明确范围，不改变 News Writer 源码 MIT 许可，也不授权原项目材料或第三方字体。

@@ -1,0 +1,28 @@
+{
+  "name": "@news-writer/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "build": "electron-vite build",
+    "build:e2e": "electron-vite build --config electron.vite.e2e.config.ts --mode e2e",
+    "build:package-smoke": "electron-vite build --config electron.vite.package-smoke.config.ts --mode package-smoke",
+    "dev": "electron-vite dev",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tooling.json"
+  },
+  "dependencies": {
+    "@news-writer/ai": "workspace:*",
+    "@news-writer/domain": "workspace:*",
+    "@news-writer/documents": "workspace:*",
+    "@news-writer/institution": "workspace:*",
+    "@news-writer/project": "workspace:*",
+    "@news-writer/retrieval": "workspace:*",
+    "@news-writer/shared": "workspace:*",
+    "lucide-react": "1.31.0",
+    "monaco-editor": "0.56.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.4.3"
+  }
+}

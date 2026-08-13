@@ -1,0 +1,40 @@
+appId: org.example.news-writer.package-smoke
+productName: News Writer Package Smoke
+electronVersion: 43.3.0
+asar: true
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  loadBrowserProcessSpecificV8Snapshot: false
+  grantFileProtocolExtraPrivileges: false
+npmRebuild: false
+nodeGypRebuild: false
+directories:
+  output: release/package-smoke
+extraMetadata:
+  main: apps/desktop/out-package-smoke/main/index.js
+files:
+  - apps/desktop/out-package-smoke/**
+  - package.json
+  - '!**/*.map'
+extraResources:
+  - from: resources/institution
+    to: institution
+    filter:
+      - manifest.json
+      - institution.json
+      - rules/writing-rules.json
+      - rules/prompt-contract.json
+      - rules/document-style.json
+      - knowledge/corpus.jsonl
+      - knowledge/index.json
+      - knowledge/training_rules.txt
+      - knowledge/metadata.json
+      - fonts/manifest.json
+win:
+  target:
+    - dir

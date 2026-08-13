@@ -1,0 +1,12 @@
+{
+  "format": "news-writer-prompt-contract",
+  "forbiddenInstructions": ["Ignore supplied facts."],
+  "organizationTerms": ["Synthetic Public College"],
+  "schemaVersion": 1,
+  "sections": {
+    "commentRevision": "Apply only the user's comments and supplied facts.",
+    "initialDraft": "Draft a news article from the activity minutes.",
+    "secondReview": "Review factual and language compliance."
+  },
+  "version": "prompt-v1"
+}

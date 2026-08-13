@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "profileId": "<private-profile-id>",
+  "fonts": [
+    {
+      "family": "<font-family>",
+      "fileName": "<font-file-name>",
+      "version": "<font-version>",
+      "sha256": "<sha256>",
+      "supplier": "<supplier>",
+      "licenseName": "<license>",
+      "redistributable": false,
+      "requiresTargetInstall": true,
+      "licenseRecordId": "<record-id>"
+    }
+  ]
+}

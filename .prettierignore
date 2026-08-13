@@ -1,0 +1,17 @@
+node_modules
+docs
+tests/fixtures
+tests/golden
+dist
+out
+out-e2e
+out-package-smoke
+release
+coverage
+test-results
+playwright-report
+review/knowledge/candidates-pending
+review/knowledge/source-manifest.json
+resources/institution/knowledge
+pnpm-lock.yaml
+resources/institution/manifest.json

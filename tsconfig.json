@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Temporary upstream compatibility exception: happy-dom references a Node 24 web type
+    // that is absent from the current @types/node release. Main and preload do not inherit it.
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["*.config.ts", "tests/**/*.ts", "packages/**/src/**/*.test.ts"],
+  "references": [
+    { "path": "./packages/domain" },
+    { "path": "./packages/shared" },
+    { "path": "./packages/project" },
+    { "path": "./packages/ai" },
+    { "path": "./packages/retrieval" },
+    { "path": "./packages/documents" },
+    { "path": "./packages/institution" }
+  ]
+}

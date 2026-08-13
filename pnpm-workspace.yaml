@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - packages/*
+
+overrides:
+  zod: 4.4.3
+
+allowBuilds:
+  electron: true
+  electron-winstaller: false
+  esbuild: true
+
+minimumReleaseAgeExclude:
+  - lucide-react@1.31.0

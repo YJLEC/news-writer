@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "profileId": "<private-profile-id>",
+  "sources": [],
+  "authorizationOwner": "<institution>",
+  "redistributionScope": "<internal-app-only>",
+  "authorizationRecordId": "<record-id>"
+}

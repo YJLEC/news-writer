@@ -1,0 +1,14 @@
+{
+  "defaultNewsType": "college-news",
+  "defaultWordCountRecommendation": 1200,
+  "dateDisplayRule": "Use dates supplied by the user without inventing missing facts.",
+  "displayName": "Synthetic Public College",
+  "externalOrganizerRules": "Describe external organizers only when supported by the activity minutes.",
+  "format": "news-writer-institution-config",
+  "forbiddenTerms": ["unverified claim"],
+  "officialPublisher": "Synthetic Public College News Desk",
+  "permittedPublisherSources": ["Synthetic Public College News Desk"],
+  "preferredTerms": ["student activity"],
+  "schemaVersion": 1,
+  "targetChannels": ["internal-demo"]
+}

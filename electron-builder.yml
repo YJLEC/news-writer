@@ -1,0 +1,48 @@
+appId: org.example.news-writer
+productName: News Writer
+electronVersion: 43.3.0
+asar: true
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  loadBrowserProcessSpecificV8Snapshot: false
+  grantFileProtocolExtraPrivileges: false
+npmRebuild: false
+nodeGypRebuild: false
+directories:
+  output: release
+extraResources:
+  - from: THIRD-PARTY-NOTICES.txt
+    to: THIRD-PARTY-NOTICES.txt
+  # The public repository carries only the synthetic institution profile.
+  # Private builds replace this directory from an external staging input.
+  - from: resources/institution
+    to: institution
+    filter:
+      - manifest.json
+      - institution.json
+      - rules/writing-rules.json
+      - rules/prompt-contract.json
+      - rules/document-style.json
+      - knowledge/corpus.jsonl
+      - knowledge/index.json
+      - knowledge/training_rules.txt
+      - knowledge/metadata.json
+      # Public builds carry only the empty font manifest. Private builds that
+      # intentionally redistribute licensed fonts must use a separately
+      # reviewed builder configuration.
+      - fonts/manifest.json
+files:
+  - apps/desktop/out/**
+  - package.json
+  - '!**/*.map'
+  - '!**/test/**'
+  - '!**/tests/**'
+  - '!**/*.test.*'
+win:
+  target:
+    - dir

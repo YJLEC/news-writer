@@ -1,0 +1,29 @@
+{
+  "body": {
+    "alignment": "justify",
+    "firstLineIndentPt": 24,
+    "fontFamily": "Synthetic Sans",
+    "fontSizePt": 12,
+    "lineSpacing": 1.5,
+    "paragraphSpacingAfterPt": 8,
+    "paragraphSpacingBeforePt": 0
+  },
+  "fileNameRule": "news-{date}.docx",
+  "fontFamilies": ["Synthetic Sans"],
+  "format": "news-writer-document-style",
+  "page": {
+    "height": "A4",
+    "margins": { "bottom": "25mm", "left": "25mm", "right": "25mm", "top": "25mm" },
+    "width": "A4"
+  },
+  "schemaVersion": 1,
+  "signoff": { "alignment": "right", "dateFormat": "YYYY年M月D日" },
+  "title": {
+    "alignment": "center",
+    "bold": true,
+    "fontFamily": "Synthetic Sans",
+    "fontSizePt": 22,
+    "lineSpacing": 1.5
+  },
+  "version": "style-v1"
+}

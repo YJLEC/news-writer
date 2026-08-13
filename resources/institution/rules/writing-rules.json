@@ -1,0 +1,19 @@
+{
+  "format": "news-writer-writing-rules",
+  "rules": [
+    {
+      "id": "rule_facts-first",
+      "level": "hard-constraint",
+      "scenarios": ["all"],
+      "text": "Use only supplied facts and mark missing information for user confirmation."
+    },
+    {
+      "id": "rule_reference-purpose",
+      "level": "style-guidance",
+      "scenarios": ["all"],
+      "text": "Use historical drafts for structure, headings, and style only; never as a source of event facts."
+    }
+  ],
+  "schemaVersion": 1,
+  "version": "writing-v1"
+}
