@@ -475,28 +475,9 @@ kbd {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(300px, 1fr) 6px minmax(300px, 1fr);
-  gap: 0;
+  grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr);
+  gap: 1px;
   background: #aab3ba;
-}
-.pane-divider {
-  cursor: col-resize;
-  background: #aab3ba;
-  z-index: 5;
-  touch-action: none;
-  user-select: none;
-}
-.pane-divider:hover,
-.pane-divider:active {
-  background: #2f855a;
-}
-.comments-divider {
-  position: absolute;
-  left: -4px;
-  top: 0;
-  bottom: 0;
-  width: 8px;
-  z-index: 11;
 }
 .editor-pane {
   min-width: 0;
@@ -571,12 +552,19 @@ kbd {
 }
 .prompt-system-label {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
   padding: 4px 8px;
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
+  border: 0;
   border-bottom: 1px solid var(--line);
   background: #f8f9fa;
+  text-align: left;
+  cursor: pointer;
 }
 .prompt-system .monaco-surface {
   height: auto;
@@ -1018,10 +1006,11 @@ textarea {
     display: none;
   }
   .editor-workspace {
-    grid-template-columns: minmax(300px, 1fr) 6px minmax(300px, 1fr);
+    grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr);
     overflow-x: auto;
   }
   .editor-pane {
+    width: calc((100vw - 44px) / 2);
     min-width: 300px;
   }
   .workflow-actions {
