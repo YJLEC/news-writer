@@ -89,8 +89,8 @@ describe('ProjectService read-only retrieval integration', () => {
         },
         10,
       );
-      expect(prepared.messages[0]?.content).toContain('历史参考稿');
-      expect(prepared.messages[0]?.content).toContain(result.hits[0]?.title);
+      expect(prepared.messages[1]?.content).toContain('历史参考稿');
+      expect(prepared.messages[1]?.content).toContain(result.hits[0]?.title);
     } finally {
       await fixture.service.closeAll();
       await rm(fixture.root, { recursive: true, force: true });

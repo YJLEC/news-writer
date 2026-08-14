@@ -70,10 +70,10 @@ describe('Prompt preparation', () => {
       { ...base, factOverrides: { location: { mode: 'manual' as const, value: '线上会议室' } } },
       { sha256Utf8 },
     );
-    expect(overridden.messages[0]?.content).toContain('# 事实检查提示');
-    expect(overridden.messages[0]?.content).toContain('线上会议室（用户确认）');
-    expect(overridden.messages[0]?.content).not.toContain('# 用户事实检查确认');
-    expect(overridden.messages[0]?.content).toContain('线上会议室');
+    expect(overridden.messages[1]?.content).toContain('# 事实检查提示');
+    expect(overridden.messages[1]?.content).toContain('线上会议室（用户确认）');
+    expect(overridden.messages[1]?.content).not.toContain('# 用户事实检查确认');
+    expect(overridden.messages[1]?.content).toContain('线上会议室');
     expect(overridden.inputFingerprint).not.toBe(automatic.inputFingerprint);
   });
 
@@ -167,9 +167,11 @@ describe('Prompt preparation', () => {
       },
       config: { defaults: DEFAULT_GENERATION_CONFIG, task: { maxWords: 800 } },
     };
-    expect(preparePrompt(input, { sha256Utf8 }).messages[0]?.content).toBe(
-      await read('tests/golden/prompts/gf-01-generation.txt'),
-    );
+    expect(
+      preparePrompt(input, { sha256Utf8 })
+        .messages.map((message) => message.content)
+        .join('\n\n'),
+    ).toBe(await read('tests/golden/prompts/gf-01-generation.txt'));
   });
 
   it('matches the other-profile generation golden byte for byte', async () => {
@@ -199,9 +201,11 @@ describe('Prompt preparation', () => {
         task: { targetChannel: '实践队公众号', maxWords: 900 },
       },
     };
-    expect(preparePrompt(input, { sha256Utf8 }).messages[0]?.content).toBe(
-      await read('tests/golden/prompts/gf-04-other-generation.txt'),
-    );
+    expect(
+      preparePrompt(input, { sha256Utf8 })
+        .messages.map((message) => message.content)
+        .join('\n\n'),
+    ).toBe(await read('tests/golden/prompts/gf-04-other-generation.txt'));
   });
 
   it('matches the review golden byte for byte', async () => {
@@ -215,9 +219,11 @@ describe('Prompt preparation', () => {
       comments: [],
       config: { defaults: DEFAULT_GENERATION_CONFIG, task: { maxWords: 800 } },
     };
-    expect(preparePrompt(input, { sha256Utf8 }).messages[0]?.content).toBe(
-      await read('tests/golden/prompts/gf-03-review.txt'),
-    );
+    expect(
+      preparePrompt(input, { sha256Utf8 })
+        .messages.map((message) => message.content)
+        .join('\n\n'),
+    ).toBe(await read('tests/golden/prompts/gf-03-review.txt'));
   });
 
   it('matches the comment revision golden byte for byte', async () => {
@@ -265,9 +271,11 @@ describe('Prompt preparation', () => {
         task: { targetChannel: '实践队公众号', maxWords: 700 },
       },
     };
-    expect(preparePrompt(input, { sha256Utf8 }).messages[0]?.content).toBe(
-      await read('tests/golden/prompts/gf-09-revision-with-comments.txt'),
-    );
+    expect(
+      preparePrompt(input, { sha256Utf8 })
+        .messages.map((message) => message.content)
+        .join('\n\n'),
+    ).toBe(await read('tests/golden/prompts/gf-09-revision-with-comments.txt'));
   });
 
   it('keeps fact checking independent of unavailable retrieval and escapes materials', () => {
@@ -284,7 +292,7 @@ describe('Prompt preparation', () => {
     );
     expect(prepared.factCheck.blocking).toBe(false);
     expect(prepared.trace.retrieval).toEqual({ state: 'unavailable' });
-    expect(prepared.messages[0]?.content).toContain('A&amp;B &lt;C&gt;');
+    expect(prepared.messages[1]?.content).toContain('A&amp;B &lt;C&gt;');
   });
 
   it.each([
@@ -393,7 +401,7 @@ describe('Prompt preparation', () => {
             },
         { sha256Utf8 },
       );
-      const content = prepared.messages[0].content;
+      const content = prepared.messages[1].content;
       expect(content).not.toContain('A&B <inject>');
       expect(content).toContain('A&amp;B &lt;inject&gt;');
       expect(content).not.toContain('A&amp;amp;B');
@@ -446,7 +454,7 @@ describe('Prompt preparation', () => {
       },
       { sha256Utf8 },
     );
-    const content = prepared.messages[0].content;
+    const content = prepared.messages[1].content;
     expect(content.indexOf('同锚点稳定顺序')).toBeLessThan(content.indexOf('修改前文'));
     expect(content.indexOf('修改前文')).toBeLessThan(content.indexOf('修改后文'));
     expect(prepared.trace.comments.sha256).toBe(

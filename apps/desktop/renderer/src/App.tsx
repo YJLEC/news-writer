@@ -1196,8 +1196,12 @@ const Workspace = ({
         dispatch({
           type: 'setPrompt',
           prompt: {
-            value: result.messages[0].content,
-            base: result.messages[0].content,
+            value: result.messages.find((message) => message.role === 'user')?.content ?? '',
+            base: result.messages.find((message) => message.role === 'user')?.content ?? '',
+            systemContent:
+              result.messages.find((message) => message.role === 'system')?.content ?? '',
+            systemBase:
+              result.messages.find((message) => message.role === 'system')?.content ?? '',
             dirty: false,
             preparation: result,
             factOverrides:
@@ -1228,6 +1232,8 @@ const Workspace = ({
       .filter((item) => item.purpose === prompt.preparation.purpose)
       .some(
         (item) =>
+          item.messages.find((message) => message.role === 'system')?.content ===
+            prompt.systemContent &&
           item.messages.find((message) => message.role === 'user')?.content === prompt.value,
       );
     if (hasSentContent && resolution === 'current' && !duplicateAcknowledged) {
@@ -1268,7 +1274,10 @@ const Workspace = ({
           retrievalEnabled: draft.preparation.trace.retrieval.state !== 'notUsed',
           factOverrides: serializeFactOverrides(draft.factOverrides) as never,
           ...(Object.keys(taskConfig).length ? { taskConfig } : {}),
-          messages: [{ role: 'user', content: draft.value }],
+          messages: [
+            { role: 'system', content: draft.systemContent },
+            { role: 'user', content: draft.value },
+          ],
           editedByUser: draft.dirty,
           editWarningAcknowledged: draft.dirty && draft.warningAcknowledged,
           promptInputFingerprint: draft.preparation.inputFingerprint,
@@ -1689,6 +1698,27 @@ const Workspace = ({
               )}
             </div>
           </header>
+          <div className="editor-body">
+          {state.leftDocument === 'prompt' && state.prompt && (
+            <details className="prompt-system" open>
+              <summary>
+                系统与机构写作规范（{state.prompt.unlocked ? '可编辑' : '只读'}）
+              </summary>
+              {state.prompt.unlocked ? (
+                <textarea
+                  className="prompt-system-editor"
+                  value={state.prompt.systemContent}
+                  readOnly={state.view.status === 'archived'}
+                  onChange={(event) =>
+                    dispatch({ type: 'editSystemPrompt', value: event.target.value })
+                  }
+                  aria-label="系统与机构写作规范"
+                />
+              ) : (
+                <pre className="prompt-system-preview">{state.prompt.systemContent}</pre>
+              )}
+            </details>
+          )}
           <MonacoTextEditor
             ariaLabel="左侧编辑器"
             uri={leftUri}
@@ -1717,6 +1747,7 @@ const Workspace = ({
               else if (state.leftDocument === 'prompt') dispatch({ type: 'editPrompt', value });
             }}
           />
+          </div>
         </article>
         <article className="editor-pane" data-focus-zone="right" tabIndex={-1}>
           <header>
@@ -2188,7 +2219,9 @@ const Workspace = ({
       )}
       {modal === 'promptWarning' && (
         <Modal title="编辑 Prompt" onClose={() => setModal(null)}>
-          <p>修改可能破坏事实约束和写作规范，修改结果由用户承担。</p>
+          <p>
+            修改「系统与机构写作规范」可能破坏事实约束和写作规范；修改「本轮素材」可能破坏事实准确性。修改结果由用户承担。
+          </p>
           <div className="modal-actions">
             <button onClick={() => setModal(null)}>取消</button>
             <button

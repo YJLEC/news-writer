@@ -25,6 +25,8 @@ export type FactOverrides = {
 export interface PromptDraft extends DraftState {
   preparation: PromptPreparationDto;
   factOverrides: FactOverrides;
+  systemContent: string;
+  systemBase: string;
   unlocked: boolean;
   warningAcknowledged: boolean;
   stale: boolean;
@@ -69,6 +71,7 @@ export type WorkspaceAction =
   | { type: 'editMinutes'; value: string }
   | { type: 'setPrompt'; prompt: PromptDraft | null }
   | { type: 'editPrompt'; value: string }
+  | { type: 'editSystemPrompt'; value: string }
   | { type: 'unlockPrompt' }
   | { type: 'selectDocument'; document: LeftDocument }
   | { type: 'selectVersion'; versionId: string | null }
@@ -146,7 +149,22 @@ export const workspaceReducer = (
             prompt: {
               ...state.prompt,
               value: action.value,
-              dirty: action.value !== state.prompt.base,
+              dirty:
+                action.value !== state.prompt.base ||
+                state.prompt.systemContent !== state.prompt.systemBase,
+            },
+          }
+        : state;
+    case 'editSystemPrompt':
+      return state.prompt
+        ? {
+            ...state,
+            prompt: {
+              ...state.prompt,
+              systemContent: action.value,
+              dirty:
+                action.value !== state.prompt.systemBase ||
+                state.prompt.value !== state.prompt.base,
             },
           }
         : state;

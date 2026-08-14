@@ -293,9 +293,10 @@ const draftInput = (sessionId: Parameters<ProjectService['getOwned']>[0]) => ({
   expectedRevision: 0,
   kind: 'draftGeneration' as const,
   parentVersionId: null,
-  messages: [{ role: 'user' as const, content: '只输出干净新闻稿。根据纪要撰写新闻稿。' }] as [
-    { role: 'user'; content: string },
-  ],
+  messages: [
+    { role: 'system' as const, content: '系统约束' },
+    { role: 'user' as const, content: '只输出干净新闻稿。根据纪要撰写新闻稿。' },
+  ] as [{ role: 'system'; content: string }, { role: 'user'; content: string }],
   editedByUser: true,
   editWarningAcknowledged: true,
   promptInputFingerprint: sha256Schema.parse('0'.repeat(64)),
@@ -337,7 +338,7 @@ describe('TaskHostService', () => {
     const queued = await tasks.start(
       {
         ...prepareInput,
-        messages: [{ ...prepared.messages[0] }],
+        messages: [{ ...prepared.messages[0] }, { ...prepared.messages[1] }],
         editedByUser: false,
         editWarningAcknowledged: false,
         promptInputFingerprint: prepared.inputFingerprint,
@@ -407,14 +408,14 @@ describe('TaskHostService', () => {
       factOverrides,
     };
     const prepared = await projects.preparePrompt(prepareInput, 20);
-    expect(prepared.messages[0]?.content).toContain('2026年8月');
-    expect(prepared.messages[0]?.content).toContain('线上会议室');
-    expect(prepared.messages[0]?.content).toContain('用户确认未提供');
+    expect(prepared.messages[1]?.content).toContain('2026年8月');
+    expect(prepared.messages[1]?.content).toContain('线上会议室');
+    expect(prepared.messages[1]?.content).toContain('用户确认未提供');
     const terminal = terminalBarrier(tasks);
     const queued = await tasks.start(
       {
         ...prepareInput,
-        messages: [{ ...prepared.messages[0] }],
+        messages: [{ ...prepared.messages[0] }, { ...prepared.messages[1] }],
         editedByUser: false,
         editWarningAcknowledged: false,
         promptInputFingerprint: prepared.inputFingerprint,
@@ -424,8 +425,8 @@ describe('TaskHostService', () => {
       20,
     );
     await expect(terminal).resolves.toBe('succeeded');
-    expect(runner.lastInput?.messages[0]?.content).toContain('2026年8月');
-    expect(runner.lastInput?.messages[0]?.content).toContain('线上会议室');
+    expect(runner.lastInput?.messages[1]?.content).toContain('2026年8月');
+    expect(runner.lastInput?.messages[1]?.content).toContain('线上会议室');
     const aggregate = projects.getOwned(view.sessionId, 20).aggregate;
     expect(aggregate.tasks.find((task) => task.id === queued.id)?.factOverrides).toEqual(
       factOverrides,
@@ -470,7 +471,7 @@ describe('TaskHostService', () => {
         {
           ...base,
           expectedRevision: changed.revision,
-          messages: [{ ...selected.messages[0] }],
+          messages: [{ ...selected.messages[0] }, { ...selected.messages[1] }],
           editedByUser: decision === 'continued',
           editWarningAcknowledged: decision === 'continued',
           promptInputFingerprint: selected.inputFingerprint,
@@ -535,7 +536,7 @@ describe('TaskHostService', () => {
           {
             ...base,
             expectedRevision: changed.revision,
-            messages: [{ ...selected.messages[0] }],
+            messages: [{ ...selected.messages[0] }, { ...selected.messages[1] }],
             editedByUser: true,
             editWarningAcknowledged: true,
             promptInputFingerprint: selected.inputFingerprint,
@@ -606,7 +607,7 @@ describe('TaskHostService', () => {
     const queued = await tasks.start(
       {
         ...prepareInput,
-        messages: [{ ...prepared.messages[0] }],
+        messages: [{ ...prepared.messages[0] }, { ...prepared.messages[1] }],
         editedByUser: false,
         editWarningAcknowledged: false,
         promptInputFingerprint: prepared.inputFingerprint,
@@ -648,7 +649,7 @@ describe('TaskHostService', () => {
         {
           ...base,
           expectedRevision: changed.revision,
-          messages: [{ ...prepared.messages[0] }],
+          messages: [{ ...prepared.messages[0] }, { ...prepared.messages[1] }],
           editedByUser: false,
           editWarningAcknowledged: false,
           promptInputFingerprint: prepared.inputFingerprint,
@@ -726,7 +727,7 @@ describe('TaskHostService', () => {
           kind: 'draftGeneration',
           parentVersionId: null,
           retrievalReportId: reportB.id,
-          messages: [{ ...prepared.messages[0] }],
+          messages: [{ ...prepared.messages[0] }, { ...prepared.messages[1] }],
           editedByUser: false,
           editWarningAcknowledged: false,
           promptInputFingerprint: prepared.inputFingerprint,
@@ -768,7 +769,7 @@ describe('TaskHostService', () => {
         expectedRevision: view.revision,
         kind: 'draftGeneration',
         parentVersionId: null,
-        messages: [{ ...draftPrepare.messages[0] }],
+        messages: [{ ...draftPrepare.messages[0] }, { ...draftPrepare.messages[1] }],
         editedByUser: false,
         editWarningAcknowledged: false,
         promptInputFingerprint: draftPrepare.inputFingerprint,
@@ -823,7 +824,7 @@ describe('TaskHostService', () => {
           expectedRevision: aggregate.revision,
           kind: 'commentRevision',
           parentVersionId: version.id,
-          messages: [{ ...revisionPrepare.messages[0] }],
+          messages: [{ ...revisionPrepare.messages[0] }, { ...revisionPrepare.messages[1] }],
           editedByUser: false,
           editWarningAcknowledged: false,
           promptInputFingerprint: revisionPrepare.inputFingerprint,
@@ -865,7 +866,7 @@ describe('TaskHostService', () => {
       await tasks.start(
         {
           ...prepareInput,
-          messages: [{ ...prepared.messages[0] }],
+          messages: [{ ...prepared.messages[0] }, { ...prepared.messages[1] }],
           editedByUser: false,
           editWarningAcknowledged: false,
           promptInputFingerprint: prepared.inputFingerprint,
@@ -912,8 +913,8 @@ describe('TaskHostService', () => {
       },
       20,
     );
-    expect(preparedFromA.messages[0].content).toContain('A分支会场');
-    expect(preparedFromA.messages[0].content).not.toContain('B分支会场');
+    expect(preparedFromA.messages[1].content).toContain('A分支会场');
+    expect(preparedFromA.messages[1].content).not.toContain('B分支会场');
     const clearedFromA = await projects.preparePrompt(
       {
         sessionId: view.sessionId,
@@ -925,7 +926,7 @@ describe('TaskHostService', () => {
       20,
     );
     expect(clearedFromA.factOverrides?.location).toEqual({ mode: 'auto' });
-    expect(clearedFromA.messages[0].content).not.toContain('A分支会场');
+    expect(clearedFromA.messages[1].content).not.toContain('A分支会场');
     expect(branchB).not.toBe(branchA);
     await projects.setLatestVersion(
       {
@@ -943,7 +944,7 @@ describe('TaskHostService', () => {
           expectedRevision: afterSwitch.revision,
           kind: 'aiReview',
           parentVersionId: branchA,
-          messages: [{ ...preparedFromA.messages[0] }],
+          messages: [{ ...preparedFromA.messages[0] }, { ...preparedFromA.messages[1] }],
           editedByUser: false,
           editWarningAcknowledged: false,
           promptInputFingerprint: preparedFromA.inputFingerprint,
@@ -1535,7 +1536,7 @@ describe('TaskHostService', () => {
     });
     await persisting;
     const input = draftInput(view.sessionId);
-    input.messages[0] = { role: 'user', content: `prompt ${candidate}` };
+    input.messages[1] = { role: 'user', content: `prompt ${candidate}` };
     const start = tasks.start(input, 20);
     releasePersist();
     await expect(setKey).resolves.toBe(true);
@@ -1666,7 +1667,7 @@ describe('TaskHostService', () => {
     const runner = new PendingRunner();
     const { projects, tasks, view } = await setup(runner);
     const input = draftInput(view.sessionId);
-    input.messages[0] = { role: 'user', content: `消息包含 ${secret}` };
+    input.messages[1] = { role: 'user', content: `消息包含 ${secret}` };
     await expect(tasks.start(input, 20)).rejects.toMatchObject({
       safe: { code: 'CONTENT_INVALID' },
     });

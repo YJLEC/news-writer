@@ -219,7 +219,10 @@ const requests: Record<string, unknown> = {
     ...session,
     kind: 'draftGeneration',
     parentVersionId: null,
-    messages: [{ role: 'user', content: '写稿' }],
+    messages: [
+      { role: 'system', content: '系统约束' },
+      { role: 'user', content: '写稿' },
+    ],
     editedByUser: false,
     editWarningAcknowledged: false,
     promptInputFingerprint: hash,
@@ -267,7 +270,10 @@ const data: Record<string, unknown> = {
   [IPC_CHANNELS.promptsPrepare]: {
     schemaVersion: 1,
     purpose: 'draftGeneration',
-    messages: [{ role: 'user', content: '写稿' }],
+    messages: [
+      { role: 'system', content: '系统约束' },
+      { role: 'user', content: '写稿' },
+    ],
     inputFingerprint: hash,
     resolvedConfig,
     factCheck: {

@@ -215,6 +215,10 @@ export const v1UserPromptMessageDtoSchema = ipcObject({
   role: z.literal('user'),
   content: boundedText(1_000_000, 1),
 });
+export const v1SystemPromptMessageDtoSchema = ipcObject({
+  role: z.literal('system'),
+  content: boundedText(1_000_000, 1),
+});
 
 export const promptViewDtoSchema = ipcObject({
   id: promptIdSchema,
@@ -499,7 +503,7 @@ export const factCheckItemDtoSchema = ipcObject({
 export const promptPreparationDtoSchema = ipcObject({
   schemaVersion: z.literal(1),
   purpose: taskKindDtoSchema,
-  messages: z.tuple([v1UserPromptMessageDtoSchema]),
+  messages: z.tuple([v1SystemPromptMessageDtoSchema, v1UserPromptMessageDtoSchema]),
   inputFingerprint: sha256Schema,
   resolvedConfig: resolvedGenerationConfigDtoSchema,
   factCheck: ipcObject({
@@ -529,7 +533,7 @@ export const promptPreparationDtoSchema = ipcObject({
 
 export const startTaskDtoSchema = ipcObject({
   ...promptPrepareFields,
-  messages: z.tuple([v1UserPromptMessageDtoSchema]),
+  messages: z.tuple([v1SystemPromptMessageDtoSchema, v1UserPromptMessageDtoSchema]),
   editedByUser: z.boolean(),
   editWarningAcknowledged: z.boolean(),
   promptInputFingerprint: sha256Schema,

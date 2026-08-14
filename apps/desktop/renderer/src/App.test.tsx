@@ -192,7 +192,10 @@ const api = () => ({
       ok({
         schemaVersion: 1 as const,
         purpose: 'draftGeneration' as const,
-        messages: [{ role: 'user' as const, content: '受信任 Prompt' }],
+        messages: [
+          { role: 'system' as const, content: '受信任系统约束' },
+          { role: 'user' as const, content: '受信任 Prompt' },
+        ],
         inputFingerprint: fingerprint,
         resolvedConfig: {
           schemaVersion: 1 as const,
