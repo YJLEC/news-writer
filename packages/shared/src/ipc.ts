@@ -55,6 +55,9 @@ const writingProfileSnapshotDtoSchema = ipcObject({
   documentStyleVersion: trimmedText(128),
   knowledgeVersion: trimmedText(128),
   resourceHash: sha256Schema,
+  officialPublisher: trimmedText(200),
+  targetChannels: z.array(trimmedText(100)).max(100),
+  defaultWordCountRecommendation: z.number().int().positive().max(100_000),
   rules: z.array(trimmedText(2_000)).max(500),
   promptSections: ipcObject({
     initialDraft: trimmedText(10_000),
@@ -86,7 +89,6 @@ export const taskStatusDtoSchema = z.enum([
   'preparing',
   'requesting',
   'processing',
-  'supplement',
   'reviewing',
   'saving',
   'succeeded',
@@ -249,7 +251,6 @@ export const taskViewDtoSchema = ipcObject({
   configSnapshot: resolvedGenerationConfigDtoSchema,
   factOverrides: factOverridesDtoSchema.optional(),
   minutes: ipcObject({ revisionId: minuteRevisionIdSchema, sha256: sha256Schema }),
-  supplement: ipcObject({ present: z.boolean(), sha256: sha256Schema }),
   retrieval: retrievalTraceDtoSchema,
   comments: ipcObject({ count: z.number().int().nonnegative(), sha256: sha256Schema }),
   reviewEnabled: z.boolean().default(false),
@@ -455,7 +456,6 @@ const promptPrepareFields = {
   parentVersionId: versionIdSchema.nullable(),
   retrievalReportId: retrievalReportIdSchema.optional(),
   retrievalEnabled: z.boolean().optional(),
-  newSupplementalFacts: boundedText(100_000, 1).optional(),
   taskConfig: generationConfigOverridesDtoSchema.optional(),
   factOverrides: factOverridesDtoSchema.optional(),
 } as const;
@@ -481,9 +481,6 @@ export const preparePromptDtoSchema = ipcObject(promptPrepareFields).superRefine
     ) {
       context.addIssue({ code: 'custom', message: 'Disabled retrieval cannot include a report' });
     }
-    if (value.kind !== 'aiReview' && value.newSupplementalFacts !== undefined) {
-      context.addIssue({ code: 'custom', message: 'Only review can add supplemental facts' });
-    }
   },
 );
 
@@ -508,7 +505,7 @@ export const promptPreparationDtoSchema = ipcObject({
   }),
   risks: z.array(
     ipcObject({
-      code: z.enum(['MISSING_FACTS', 'SUPPLEMENT_CONFLICT']),
+      code: z.enum(['MISSING_FACTS']),
       severity: z.literal('blocking'),
       message: trimmedText(500),
     }),
@@ -516,7 +513,6 @@ export const promptPreparationDtoSchema = ipcObject({
   trace: ipcObject({
     minutes: ipcObject({ revisionId: minuteRevisionIdSchema, sha256: sha256Schema }),
     parent: ipcObject({ versionId: versionIdSchema, contentSha256: sha256Schema }).nullable(),
-    supplement: ipcObject({ present: z.boolean(), sha256: sha256Schema }),
     retrieval: retrievalTraceDtoSchema,
     comments: ipcObject({ count: z.number().int().nonnegative(), sha256: sha256Schema }),
     writingRulesVersion: trimmedText(128),
@@ -534,7 +530,7 @@ export const startTaskDtoSchema = ipcObject({
   staleResolution: z.enum(['current', 'regenerated', 'continued']),
   previousPromptInputFingerprint: sha256Schema.optional(),
   acknowledgedRiskCodes: z
-    .array(z.enum(['MISSING_FACTS', 'SUPPLEMENT_CONFLICT']))
+    .array(z.enum(['MISSING_FACTS']))
     .max(2)
     .default([]),
   reviewEnabled: z.boolean().optional(),
@@ -602,12 +598,6 @@ export const cancelTaskDtoSchema = ipcObject({
 export const cancelTaskResultDtoSchema = ipcObject({
   disposition: z.enum(['accepted', 'alreadyRequested', 'savingOrFinished']),
 });
-export const provideSupplementDtoSchema = ipcObject({
-  sessionId: sessionIdSchema,
-  expectedRevision: nonNegativeIntegerSchema,
-  taskId: taskIdSchema,
-  supplementalFacts: boundedText(100_000),
-});
 export const closedResultDtoSchema = ipcObject({ closed: z.literal(true) });
 
 export const taskStatusEventDtoSchema = ipcObject({
@@ -658,7 +648,6 @@ export const IPC_CHANNELS = Object.freeze({
   retrievalSearch: 'nw:v1:retrieval:search',
   tasksStart: 'nw:v1:tasks:start',
   tasksCancel: 'nw:v1:tasks:cancel',
-  tasksProvideSupplement: 'nw:v1:tasks:provide-supplement',
   tasksStatusEvent: 'nw:v1:tasks:status',
   documentsExportWithDialog: 'nw:v1:documents:export-with-dialog',
 } as const);
@@ -727,10 +716,6 @@ export const IPC_INVOKE_CONTRACTS = Object.freeze({
   [IPC_CHANNELS.retrievalSearch]: invokeContract(retrievalQueryDtoSchema, retrievalViewDtoSchema),
   [IPC_CHANNELS.tasksStart]: invokeContract(startTaskDtoSchema, taskViewDtoSchema),
   [IPC_CHANNELS.tasksCancel]: invokeContract(cancelTaskDtoSchema, cancelTaskResultDtoSchema),
-  [IPC_CHANNELS.tasksProvideSupplement]: invokeContract(
-    provideSupplementDtoSchema,
-    taskViewDtoSchema,
-  ),
   [IPC_CHANNELS.documentsExportWithDialog]: invokeContract(
     exportDocumentDtoSchema,
     exportDocumentResultDtoSchema,
@@ -776,7 +761,6 @@ export type UpdateUserConfigDto = z.infer<typeof updateUserConfigDtoSchema>;
 export type PreviewConfigDto = z.infer<typeof previewConfigDtoSchema>;
 export type CancelTaskDto = z.infer<typeof cancelTaskDtoSchema>;
 export type CancelTaskResultDto = z.infer<typeof cancelTaskResultDtoSchema>;
-export type ProvideSupplementDto = z.infer<typeof provideSupplementDtoSchema>;
 export type TaskViewDto = z.infer<typeof taskViewDtoSchema>;
 export type TaskStatusEventDto = z.infer<typeof taskStatusEventDtoSchema>;
 export type ExportDocumentDto = z.infer<typeof exportDocumentDtoSchema>;
@@ -822,7 +806,6 @@ export interface NewsWriterApiV1 {
   tasks: {
     start(input: StartTaskDto): Promise<IpcResult<TaskViewDto>>;
     cancel(input: CancelTaskDto): Promise<IpcResult<CancelTaskResultDto>>;
-    provideSupplement(input: ProvideSupplementDto): Promise<IpcResult<TaskViewDto>>;
     onStatus(listener: (event: TaskStatusEventDto) => void): () => void;
   };
   documents: {

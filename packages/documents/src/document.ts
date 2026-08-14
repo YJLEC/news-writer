@@ -158,29 +158,32 @@ const parseDate = (text: string): string | undefined => {
 const looksLikeDateText = (text: string): boolean =>
   /^20\d{2}年\d{1,2}月(?:\d{1,2}日)?$/u.test(text.trim());
 
+const looksLikeDatePlaceholder = (text: string): boolean =>
+  /^(?:[（(]?日期[）)]?|待补日期|日期待补)(?:[：:]?\s*)$/u.test(text.trim());
+
 const footerIndices = (
   nonEmpty: readonly string[],
-  manualDateProvided: boolean,
+  _manualDateProvided: boolean,
   manualSignOffProvided = false,
   titleRecognized = false,
 ): { signOffIndex: number; dateIndex: number } => {
   const lastIndex = nonEmpty.length - 1;
   const lastIsDate =
     lastIndex >= 0 &&
-    (parseDate(nonEmpty[lastIndex]!) !== undefined || looksLikeDateText(nonEmpty[lastIndex]!));
-  const dateIndex =
-    lastIsDate ||
-    (manualDateProvided && nonEmpty.length >= 4) ||
-    (manualDateProvided && manualSignOffProvided && !titleRecognized && nonEmpty.length >= 3)
-      ? lastIndex
-      : -1;
-  const signOffIndex =
-    nonEmpty.length >= 4 || (manualSignOffProvided && nonEmpty.length >= 3 && !titleRecognized)
-      ? lastIndex - 1
-      : dateIndex === -1 && nonEmpty.length >= 3
-        ? lastIndex
+    (parseDate(nonEmpty[lastIndex]!) !== undefined ||
+      looksLikeDateText(nonEmpty[lastIndex]!) ||
+      looksLikeDatePlaceholder(nonEmpty[lastIndex]!));
+  if (lastIsDate) {
+    const signOffIndex =
+      nonEmpty.length >= 4 || (manualSignOffProvided && nonEmpty.length >= 3 && !titleRecognized)
+        ? lastIndex - 1
         : -1;
-  return { signOffIndex, dateIndex };
+    return { signOffIndex, dateIndex: lastIndex };
+  }
+  // No date (or placeholder) line in the text: the last line is the sign-off
+  // and the date is provided manually or missing. Do not promote the
+  // second-to-last line to sign-off (it is body).
+  return { signOffIndex: lastIndex >= 0 ? lastIndex : -1, dateIndex: -1 };
 };
 
 export type NewsDocumentOverrides = Partial<Pick<NewsDocument, 'title' | 'signOff' | 'dateText'>>;

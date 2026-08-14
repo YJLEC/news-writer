@@ -5,7 +5,13 @@ import { z } from 'zod';
 
 export const diagnosticEventSchema = z
   .object({
-    name: z.enum(['renderer-crashed', 'shutdown-watchdog', 'ipc-rejected', 'task-status']),
+    name: z.enum([
+      'renderer-crashed',
+      'shutdown-watchdog',
+      'ipc-rejected',
+      'task-status',
+      'institution-profile-invalid',
+    ]),
     occurredAt: timestampSchema,
     diagnosticId: z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/),
     sessionId: z.string().uuid().optional(),

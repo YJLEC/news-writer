@@ -74,6 +74,19 @@ const assertActive = (project: ProjectAggregateV1): void => {
   }
 };
 
+const hasActiveTask = (project: ProjectAggregateV1): boolean =>
+  project.tasks.some((task) =>
+    ['queued', 'preparing', 'requesting', 'processing', 'reviewing', 'saving'].includes(
+      task.status,
+    ),
+  );
+
+const assertNoActiveTask = (project: ProjectAggregateV1): void => {
+  if (hasActiveTask(project)) {
+    throw new DomainRuleError('STATE_CONFLICT', 'An active task must finish first');
+  }
+};
+
 const withRevision = (
   project: ProjectAggregateV1,
   at: Timestamp,
@@ -180,6 +193,7 @@ export const saveMinutes = (
 ): ProjectAggregateV1 => {
   assertRevision(project, expectedRevision);
   assertActive(project);
+  assertNoActiveTask(project);
   const at = dependencies.clock.now();
   const minutes = minutesSnapshotSchema.parse({
     minuteId: project.minutes.minuteId,
@@ -199,6 +213,7 @@ export const updateProjectConfig = (
 ): ProjectAggregateV1 => {
   assertRevision(project, expectedRevision);
   assertActive(project);
+  assertNoActiveTask(project);
   const projectConfig = generationConfigOverridesSchema.parse(overrides);
   if (JSON.stringify(project.projectConfig) === JSON.stringify(projectConfig)) return project;
   return withRevision(project, at, runtime, {
@@ -215,6 +230,7 @@ export const changeProjectProfile = (
 ): ProjectAggregateV1 => {
   assertRevision(project, expectedRevision);
   assertActive(project);
+  assertNoActiveTask(project);
   if (project.profile === profile) return project;
   if (
     project.prompts.length +
@@ -242,6 +258,7 @@ export const setLatestVersion = (
 ): ProjectAggregateV1 => {
   assertRevision(project, expectedRevision);
   assertActive(project);
+  assertNoActiveTask(project);
   if (!project.versions.some((version) => version.id === versionId)) {
     throw new DomainRuleError('ENTITY_NOT_FOUND', 'Version does not exist');
   }
@@ -298,6 +315,7 @@ export const addComment = (
 ): ProjectAggregateV1 => {
   assertRevision(project, expectedRevision);
   assertActive(project);
+  assertNoActiveTask(project);
   assertCommentTarget(project, input.versionId, input.anchor, dependencies.artifacts);
   const at = dependencies.clock.now();
   const comment = commentRecordSchema.parse({
@@ -331,6 +349,7 @@ export const editComment = (
 ): ProjectAggregateV1 => {
   assertRevision(project, expectedRevision);
   assertActive(project);
+  assertNoActiveTask(project);
   const index = project.comments.findIndex((comment) => comment.id === input.commentId);
   const current = project.comments[index];
   if (current === undefined) {
@@ -369,6 +388,7 @@ export const deleteComment = (
 ): ProjectAggregateV1 => {
   assertRevision(project, expectedRevision);
   assertActive(project);
+  assertNoActiveTask(project);
   const current = project.comments.find((comment) => comment.id === input.commentId);
   if (current === undefined) {
     throw new DomainRuleError('ENTITY_NOT_FOUND', 'Comment does not exist');
@@ -464,9 +484,6 @@ export const queueTask = (
     ...(parsedInput.factOverrides === undefined
       ? {}
       : { factOverrides: structuredClone(parsedInput.factOverrides) }),
-    ...(parsedInput.supplementalFacts === undefined
-      ? {}
-      : { supplementalFacts: parsedInput.supplementalFacts }),
     ...(parsedInput.retrievalReportId === undefined
       ? {}
       : { retrievalReportId: parsedInput.retrievalReportId }),
@@ -485,12 +502,11 @@ export const queueTask = (
 };
 
 type TransitionPayload =
-  | { status: 'preparing' | 'requesting' | 'processing' | 'supplement' | 'reviewing' }
+  | { status: 'preparing' | 'requesting' | 'processing' | 'reviewing' }
   | {
       status: 'saving';
       successTransactionId: string;
       proposedVersionId: VersionId;
-      targetRevision: number;
     }
   | {
       status: 'failed' | 'cancelled' | 'timedOut';
@@ -513,15 +529,11 @@ export const transitionTask = (
   if (!canTransitionTask(current.status, payload.status)) {
     throw new DomainRuleError('STATE_CONFLICT', 'Illegal task transition');
   }
-  if (payload.status === 'saving' && payload.targetRevision !== project.revision + 2) {
-    throw new DomainRuleError('REVISION_CONFLICT', 'Saving target revision is invalid');
-  }
   const next = taskRecordSchema.parse({
     ...(() => {
       const base: Record<string, unknown> = { ...current };
       delete base.successTransactionId;
       delete base.proposedVersionId;
-      delete base.targetRevision;
       return base;
     })(),
     ...payload,
@@ -556,7 +568,6 @@ export const commitSuccessfulVersion = (
     throw new DomainRuleError('STATE_CONFLICT', 'Task must be saving');
   }
   if (
-    task.targetRevision !== project.revision + 1 ||
     project.latestVersionId !== task.expectedLatestVersionId ||
     task.parentVersionId !== task.expectedLatestVersionId
   ) {
@@ -583,7 +594,6 @@ export const commitSuccessfulVersion = (
     ...(() => {
       const base: Record<string, unknown> = { ...task };
       delete base.proposedVersionId;
-      delete base.targetRevision;
       return base;
     })(),
     status: 'succeeded',
@@ -613,6 +623,7 @@ export const recordRetrieval = (
 ): ProjectAggregateV1 => {
   assertRevision(project, expectedRevision);
   assertActive(project);
+  assertNoActiveTask(project);
   const parsed = retrievalReportSchema.parse(report);
   if (project.retrievalReports.some((existing) => existing.id === parsed.id)) {
     throw new DomainRuleError('STATE_CONFLICT', 'Retrieval report already exists');
@@ -630,6 +641,7 @@ export const recordExport = (
   runtime: RuntimeVersionSnapshot,
 ): ProjectAggregateV1 => {
   assertRevision(project, expectedRevision);
+  assertNoActiveTask(project);
   const parsed = exportRecordSchema.parse(record);
   if (!project.versions.some((version) => version.id === parsed.versionId)) {
     throw new DomainRuleError('ENTITY_NOT_FOUND', 'Export version does not exist');

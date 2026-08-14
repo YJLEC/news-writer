@@ -193,7 +193,7 @@ test('runs a successful generation through the isolated controlled AI entry', as
   }
 });
 
-test('reviews a draft with one new supplement and does not resubmit it as new input', async () => {
+test('automatically runs the AI review pass before saving the version', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'nw-controlled-review-'));
   const userData = path.join(root, 'user-data');
   const projectRoot = path.join(root, 'project');
@@ -201,11 +201,9 @@ test('reviews a draft with one new supplement and does not resubmit it as new in
     path.join(repositoryRoot, 'tests', 'fixtures', 'minutes', 'gf-01-official-complete.md'),
     'utf8',
   );
-  const supplement = '已确认补充：活动现场设有三个信息核验小组。';
   const articles = [
     '初稿标题\n\n2099年4月12日，学院在教学楼A101举办信息核验工作坊。',
-    '二次审稿标题\n\n2099年4月12日，学院在教学楼A101举办信息核验工作坊，现场设有三个信息核验小组。',
-    '再次审稿标题\n\n2099年4月12日，学院在教学楼A101举办信息核验工作坊。',
+    '二次审稿标题\n\n2099年4月12日，学院在教学楼A101举办信息核验工作坊。',
   ];
   const electronApp = await electron.launch({
     executablePath: electronExecutablePath,
@@ -239,7 +237,7 @@ test('reviews a draft with one new supplement and does not resubmit it as new in
     await page.getByLabel('API Key').fill('synthetic-review-key');
     await page.getByRole('button', { name: '保存' }).click();
     await page.getByRole('button', { name: /新建项目/ }).click();
-    await page.getByLabel('项目名称').fill('AI 二次审稿补充事实');
+    await page.getByLabel('项目名称').fill('AI 二次审稿自动执行');
     await page.getByRole('button', { name: '选择目录并创建' }).click();
     await page.locator('[data-testid="monaco-左侧编辑器"] .view-lines').click();
     await page.keyboard.insertText(minutes);
@@ -256,9 +254,6 @@ test('reviews a draft with one new supplement and does not resubmit it as new in
       }
     };
     await acceptRisk();
-    await expect(page.getByRole('dialog', { name: '补充信息' })).toBeVisible({ timeout: 10_000 });
-    await page.getByLabel('补充事实（可选）').fill(supplement);
-    await page.getByRole('button', { name: '开始 AI 二次审稿' }).click();
     await waitForVersionCount(projectRoot, 1);
     await expect(page.locator('.task-summary strong')).toHaveText('已完成', { timeout: 10_000 });
 
@@ -279,7 +274,7 @@ test('reviews a draft with one new supplement and does not resubmit it as new in
           status: string;
           parentVersionId: string | null;
           promptId: string;
-          supplementalFacts?: string;
+          history: Array<{ status: string }>;
           resultVersionId?: string;
         };
       };
@@ -290,6 +285,7 @@ test('reviews a draft with one new supplement and does not resubmit it as new in
       parentVersionId: null,
       resultVersionId: versionIds[0],
     });
+    expect(reviewTask.payload.history.map((entry) => entry.status)).toContain('reviewing');
 
     for (const [task, versionIndex] of [[reviewTask, 0]] as const) {
       const promptRef = head.state.prompts.find(

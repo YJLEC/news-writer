@@ -55,7 +55,6 @@ export const taskStatusSchema = z.enum([
   'preparing',
   'requesting',
   'processing',
-  'supplement',
   'reviewing',
   'saving',
   'succeeded',
@@ -76,6 +75,9 @@ export const writingProfileSnapshotSchema = z
     documentStyleVersion: z.string().trim().min(1).max(128),
     knowledgeVersion: z.string().trim().min(1).max(128),
     resourceHash: sha256Schema,
+    officialPublisher: z.string().trim().min(1).max(200),
+    targetChannels: z.array(z.string().trim().min(1).max(100)).max(100),
+    defaultWordCountRecommendation: z.number().int().positive().max(100_000),
     rules: z.array(z.string().trim().min(1).max(2_000)).max(500),
     promptSections: z
       .object({
@@ -229,21 +231,11 @@ export const queueTaskInputSchema = z
       .strict(),
     profileSnapshot: writingProfileSnapshotSchema.optional(),
     factOverrides: factOverridesSchema.optional(),
-    supplementalFacts: z.string().trim().min(1).max(100_000).optional(),
     retrievalReportId: retrievalReportIdSchema.optional(),
     retrievalUnavailable: z.boolean().optional(),
     reviewEnabled: z.boolean().optional(),
   })
-  .strict()
-  .superRefine((input, context) => {
-    if (input.kind === 'draftGeneration' && input.supplementalFacts !== undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['supplementalFacts'],
-        message: 'Draft generation cannot use supplemental facts',
-      });
-    }
-  });
+  .strict();
 
 export type QueueTaskInput = z.infer<typeof queueTaskInputSchema>;
 
@@ -327,7 +319,6 @@ const taskBaseFields = {
   profileSnapshot: writingProfileSnapshotSchema.optional(),
   minutesSnapshot: minutesSnapshotSchema,
   factOverrides: factOverridesSchema.optional(),
-  supplementalFacts: z.string().trim().min(1).max(100_000).optional(),
   reviewEnabled: z.boolean().optional(),
   retrievalReportId: retrievalReportIdSchema.optional(),
   retrievalUnavailable: z.boolean().optional(),
@@ -337,7 +328,7 @@ const taskBaseFields = {
 } as const;
 
 const activeTaskSchema = (
-  status: 'queued' | 'preparing' | 'requesting' | 'processing' | 'supplement' | 'reviewing',
+  status: 'queued' | 'preparing' | 'requesting' | 'processing' | 'reviewing',
 ) => z.object({ ...taskBaseFields, status: z.literal(status) }).strict();
 
 const transactionUuidSchema = z
@@ -351,7 +342,6 @@ const savingTaskSchema = z
     status: z.literal('saving'),
     successTransactionId: transactionUuidSchema,
     proposedVersionId: versionIdSchema,
-    targetRevision: positiveIntegerSchema,
   })
   .strict();
 
@@ -380,8 +370,7 @@ const transitions: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
   queued: ['preparing', 'failed', 'cancelled'],
   preparing: ['requesting', 'failed', 'cancelled', 'timedOut'],
   requesting: ['processing', 'failed', 'cancelled', 'timedOut'],
-  processing: ['saving', 'supplement', 'failed', 'cancelled', 'timedOut'],
-  supplement: ['reviewing', 'failed', 'cancelled', 'timedOut'],
+  processing: ['saving', 'reviewing', 'failed', 'cancelled', 'timedOut'],
   reviewing: ['saving', 'failed', 'cancelled', 'timedOut'],
   saving: ['succeeded', 'failed'],
   succeeded: [],
@@ -399,7 +388,6 @@ export const taskRecordSchema = z
     activeTaskSchema('preparing'),
     activeTaskSchema('requesting'),
     activeTaskSchema('processing'),
-    activeTaskSchema('supplement'),
     activeTaskSchema('reviewing'),
     savingTaskSchema,
     succeededTaskSchema,
@@ -450,13 +438,6 @@ export const taskRecordSchema = z
       }
     } else if (task.commentSnapshot.length > 0 || task.commentSnapshotAt !== undefined) {
       context.addIssue({ code: 'custom', message: 'Only comment revision tasks carry comments' });
-    }
-    if (task.kind === 'draftGeneration' && task.supplementalFacts !== undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['supplementalFacts'],
-        message: 'Draft generation cannot use supplemental facts',
-      });
     }
     if (task.retrievalReportId !== undefined && task.retrievalUnavailable === true) {
       context.addIssue({ code: 'custom', message: 'A retrieval report cannot be unavailable' });

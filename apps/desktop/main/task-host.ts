@@ -12,14 +12,12 @@ import {
   type WorkerRunner,
 } from '@news-writer/ai';
 import {
-  DEFAULT_GENERATION_CONFIG,
   checkMissingFacts,
   commitSuccessfulVersion,
   fingerprintCommentSnapshot,
   queueTask,
   resolveBranchFacts,
   resolveFactOverrides,
-  resolveSupplementalFacts,
   transitionTask,
   validateNewsContent,
   type ProjectAggregateV1,
@@ -43,7 +41,6 @@ import {
   taskStatusEventDtoSchema,
   type CancelTaskDto,
   type CancelTaskResultDto,
-  type ProvideSupplementDto,
   type SessionId,
   type StartTaskDto,
   type TaskStatusEventDto,
@@ -95,7 +92,6 @@ export class TaskHostService {
   readonly #onUnrecoverable: (error: unknown) => void | Promise<void>;
   readonly #gate: LinearizationGate;
   readonly #active = new Map<SessionId, ActiveHost>();
-  readonly #supplementResolvers = new Map<TaskId, (value: string) => void>();
   readonly #listeners = new Map<number, (event: TaskStatusEventDto) => void>();
 
   constructor(
@@ -146,9 +142,6 @@ export class TaskHostService {
         ...(input.retrievalReportId === undefined
           ? {}
           : { retrievalReportId: input.retrievalReportId }),
-        ...(input.newSupplementalFacts === undefined
-          ? {}
-          : { newSupplementalFacts: input.newSupplementalFacts }),
         ...(input.factOverrides === undefined ? {} : { factOverrides: input.factOverrides }),
         ...(input.taskConfig === undefined ? {} : { taskConfig: input.taskConfig }),
       },
@@ -226,13 +219,6 @@ export class TaskHostService {
     const userConfig = await this.#projects.readUserConfigWithinGate();
     const branchFacts = resolveBranchFacts(owned.aggregate, input.parentVersionId);
     const factOverrides = resolveFactOverrides(branchFacts.factOverrides, input.factOverrides);
-    const supplementalFacts =
-      input.kind === 'draftGeneration'
-        ? undefined
-        : resolveSupplementalFacts(
-            branchFacts.supplementalFacts,
-            input.kind === 'aiReview' ? input.newSupplementalFacts : undefined,
-          );
     const queuedAt = systemClock.now();
     const queued = queueTask(
       owned.aggregate,
@@ -243,11 +229,10 @@ export class TaskHostService {
         ...(input.editedByUser ? { editWarningAcknowledgedAt: queuedAt } : {}),
         upstream,
         config: {
-          defaults: DEFAULT_GENERATION_CONFIG,
+          defaults: this.#projects.readDefaultGenerationConfig(owned.aggregate.profile),
           ...(Object.keys(userConfig.config).length === 0 ? {} : { user: userConfig.config }),
           ...(input.taskConfig === undefined ? {} : { task: input.taskConfig }),
         },
-        ...(supplementalFacts === undefined ? {} : { supplementalFacts }),
         ...(factOverrides === undefined ? {} : { factOverrides }),
         ...(prepared.trace.retrieval.state === 'used' ||
         prepared.trace.retrieval.state === 'zeroHits'
@@ -372,43 +357,6 @@ export class TaskHostService {
       });
     this.#active.set(input.sessionId, active);
     return this.#taskView(owned.project.read(), queuedTask.id);
-  }
-
-  async provideSupplement(input: ProvideSupplementDto, ownerId: number): Promise<TaskViewDto> {
-    return await this.#gate.run(async () => {
-      const owned = this.#projects.getOwned(input.sessionId, ownerId);
-      if (owned.aggregate.revision !== input.expectedRevision)
-        throw new SafeMainError(this.#conflict());
-      const active = this.#active.get(input.sessionId);
-      const task = owned.aggregate.tasks.find((candidate) => candidate.id === input.taskId);
-      if (
-        active === undefined ||
-        active.ownerId !== ownerId ||
-        active.taskId !== input.taskId ||
-        task?.status !== 'supplement'
-      ) {
-        throw new SafeMainError(this.#stateConflict('This task is not waiting for supplement'));
-      }
-      const next = transitionTask(
-        owned.aggregate,
-        input.taskId,
-        { status: 'reviewing' },
-        input.expectedRevision,
-        systemClock.now(),
-        this.#runtime,
-      );
-      await owned.project.commit({
-        transactionId: makeTransactionId(),
-        commitId: makeCommitId(),
-        expectedRevision: input.expectedRevision,
-        expectedHeadCommitId: owned.project.headCommitId,
-        nextAggregate: next,
-      });
-      this.#emit(input.sessionId, ownerId, input.taskId);
-      this.#supplementResolvers.get(input.taskId)?.(input.supplementalFacts);
-      this.#supplementResolvers.delete(input.taskId);
-      return this.#taskView(owned.project.read(), input.taskId);
-    });
   }
 
   async cancel(input: CancelTaskDto, ownerId: number): Promise<CancelTaskResultDto> {
@@ -545,14 +493,13 @@ export class TaskHostService {
             if (task.status === 'failed') return 'conflict';
             if (command.kind === 'save') {
               if (options.deferSave) {
-                await commitTransitionWithinGate({ status: 'supplement' });
+                await commitTransitionWithinGate({ status: 'reviewing' });
                 return 'saving';
               }
               await commitTransitionWithinGate({
                 status: 'saving',
                 successTransactionId,
                 proposedVersionId,
-                targetRevision: current.revision + 2,
               });
               return 'saving';
             }
@@ -576,37 +523,6 @@ export class TaskHostService {
     firstResult: ChatCompletionResult,
     active: ActiveHost,
   ): Promise<void> {
-    const supplement = await new Promise<string>((resolve) => {
-      this.#supplementResolvers.set(taskId, resolve);
-      active.cancel = async () =>
-        await this.#gate.run(async () => {
-          const current = project.read();
-          const task = current.tasks.find((candidate) => candidate.id === taskId);
-          if (task?.status !== 'supplement') return 'savingOrFinished' as const;
-          const error = makeSafeError('REQUEST_CANCELLED', 'The request was cancelled', {
-            retryable: true,
-          });
-          const next = transitionTask(
-            current,
-            taskId,
-            { status: 'cancelled', error },
-            current.revision,
-            error.occurredAt,
-            this.#runtime,
-          );
-          await project.commit({
-            transactionId: makeTransactionId(),
-            commitId: makeCommitId(),
-            expectedRevision: current.revision,
-            expectedHeadCommitId: project.headCommitId,
-            nextAggregate: next,
-          });
-          this.#supplementResolvers.get(taskId)?.('');
-          this.#supplementResolvers.delete(taskId);
-          this.#emit(sessionId, ownerId, taskId);
-          return 'accepted' as const;
-        });
-    });
     const current = project.read();
     const task = current.tasks.find((candidate) => candidate.id === taskId);
     if (task?.status !== 'reviewing') return;
@@ -620,7 +536,7 @@ export class TaskHostService {
             date: '日期',
             time: '时间',
             location: '地点',
-            organizer: '举办/组织主体',
+            organizer: '活动主办/组织方',
           };
           if (value === undefined) return [];
           return [
@@ -635,11 +551,10 @@ export class TaskHostService {
     const hasFactOverrides = factOverrides !== undefined && Object.keys(factOverrides).length > 0;
     const reviewFacts = checkMissingFacts({
       minutes,
-      ...(supplement.trim() ? { supplementalFacts: supplement } : {}),
       ...(factOverrides === undefined ? {} : { factOverrides }),
     });
     const factBoundary = hasFactOverrides
-      ? '活动纪要、用户确认的补充信息和用户事实检查确认共同构成本轮事实来源；标记为“用户确认”的手动值必须按原文使用；“用户确认未提供”表示不得补写该字段；自动识别结果仍须以活动纪要为准。'
+      ? '活动纪要和用户事实检查确认共同构成本轮事实来源；标记为“用户确认”的手动值必须按原文使用；“用户确认未提供”表示不得补写该字段；自动识别结果仍须以活动纪要为准。'
       : '';
     const dateOutput = hasFactOverrides
       ? reviewFacts.date.evidence === undefined
@@ -651,17 +566,12 @@ export class TaskHostService {
       '校核并修订下面的新闻稿初稿。',
       '',
       '# 审稿规范',
-      `检查事实边界、标题、语言、中文标点和新闻稿结构。${factBoundary || '活动纪要及用户确认的补充信息是唯一事实来源。'} 删除无法由来源支持的细节。只输出完整新闻稿，不输出审稿意见或修改说明。`,
+      `检查事实边界、标题、语言、中文标点和新闻稿结构。${factBoundary || '活动纪要是唯一事实来源。'} 删除无法由来源支持的细节。只输出完整新闻稿，不输出审稿意见或修改说明。`,
       '',
       '# 活动纪要',
       '<minutes>',
       minutes.trimEnd(),
       '</minutes>',
-      '',
-      '# 用户补充信息',
-      '<supplement>',
-      supplement.trim() || '本次无补充信息。',
-      '</supplement>',
       '',
       '# 用户事实检查确认',
       ...(overrideLines.length > 0 ? overrideLines : ['本次未修改自动事实检查结果。']),
@@ -836,14 +746,6 @@ export class TaskHostService {
       minutes: {
         revisionId: task.minutesSnapshot.revisionId,
         sha256: task.minutesSnapshot.contentRef.sha256,
-      },
-      supplement: {
-        present: task.supplementalFacts !== undefined,
-        sha256: sha256Schema.parse(
-          createHash('sha256')
-            .update(task.supplementalFacts ?? '', 'utf8')
-            .digest('hex'),
-        ),
       },
       factOverrides: task.factOverrides,
       retrieval: (() => {

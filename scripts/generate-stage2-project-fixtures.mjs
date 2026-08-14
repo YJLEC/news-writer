@@ -159,7 +159,6 @@ const createFixture = async (name, namespace, hour) => {
         status: 'saving',
         successTransactionId,
         proposedVersionId: versionId,
-        targetRevision: project.revision + 2,
       },
       project.revision,
       clock.now(),

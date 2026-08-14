@@ -1,0 +1,7 @@
+# Force LF line endings for all text files. Several on-disk resources and
+# test fixtures are validated by byte-exact SHA-256 hashes (institution
+# bundle manifests, knowledge corpus/index metadata, project contentRefs).
+# On Windows, core.autocrlf would otherwise rewrite LF -> CRLF on checkout
+# and break every hash check, making the institution profile and the test
+# fixtures fail to load. This repository tracks no binary files.
+* text eol=lf

@@ -10,7 +10,7 @@
 ### 独立 review 证据
 
 - 四份文本的外层章节名称和顺序与已批准合约逐项一致；嵌入纪要经 LF 规范化后与对应 fixture 逐字一致，generation 的检索标题和首段与 `r01`、`r03` fixture 逐字一致。
-- official 与 other 场景边界正确；历史参考仅出现在 generation，review 正确使用已确认地点“图书馆研讨室 C203”，revision 包含父版本、明确的无补充状态和恰好三个当前版本批注。
+- official 与 other 场景边界正确；历史参考仅出现在 generation，review 直接以纪要事实校核初稿，revision 包含父版本和恰好三个当前版本批注。
 - 未包含禁止的任务、版本或批注 ID、时间戳、绝对路径、凭据、模板占位符、未替换标记及无关历史；四份文件均为无 BOM 的 UTF-8、LF 和单一末尾换行。
 - 对只读原项目 `news` 的 6305 个文本文件执行连续 16 个汉字复用检查，四份 Prompt 均无匹配。
 
@@ -20,8 +20,8 @@
 | --- | --- | --- | --- |
 | `gf-01-generation.txt` | `tests/fixtures/minutes/gf-01-official-complete.md` | `r01` 检索源首段、学院网站、800字 | generation 章节完整；纪要是唯一事实源；参考稿只作风格；official 落款正确。 |
 | `gf-04-other-generation.txt` | `tests/fixtures/minutes/gf-04-other-channel-material-priority.md` | `r03` 检索源首段、实践队公众号、900字 | other 不套用学院主体；区分活动内容、背景和视频创意。 |
-| `gf-03-review-with-supplement.txt` | `tests/fixtures/minutes/gf-03-official-missing-location.md` | 补充地点“图书馆研讨室 C203”；内嵌待审稿含无依据人数和夸大评价 | review 无历史参考章节；补充成为事实源；删除无依据内容；输出干净终稿。 |
-| `gf-09-revision-with-comments.txt` | `tests/fixtures/minutes/gf-04-other-channel-material-priority.md` | 内嵌父版本；无补充；三个固定批注 | revision 无历史参考章节；仅父版本批注；批注不作为事实；删除错误关系、视频引语和夸大评价。 |
+| `gf-03-review.txt` | `tests/fixtures/minutes/gf-03-official-missing-location.md` | 内嵌待审稿含无依据人数和夸大评价 | review 无历史参考章节；纪要即事实源；删除无依据内容；输出干净终稿。 |
+| `gf-09-revision-with-comments.txt` | `tests/fixtures/minutes/gf-04-other-channel-material-priority.md` | 内嵌父版本；三个固定批注 | revision 无历史参考章节；仅父版本批注；批注不作为事实；删除错误关系、视频引语和夸大评价。 |
 
 ## 固定规则
 

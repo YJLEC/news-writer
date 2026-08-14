@@ -23,6 +23,7 @@ import {
   transitionTask,
   updateProjectConfig,
   type GenerationConfigOverrides,
+  type GenerationConfigValues,
   type ProjectAggregateV1,
   type PromptPreparation,
 } from '@news-writer/domain';
@@ -802,7 +803,7 @@ export class ProjectService {
         schemaVersion: 1,
         kind: input.kind,
         profile: project.profile,
-        publisher: this.#publisher(project.profile, minutesContent),
+        publisher: this.#publisher(project, minutesContent),
         minutes: {
           revisionId: project.minutes.revisionId,
           contentSha256: project.minutes.contentRef.sha256,
@@ -816,17 +817,11 @@ export class ProjectService {
                 contentSha256: parent.contentRef.sha256,
                 content: parentContent,
               },
-        ...(branchFacts.supplementalFacts === undefined
-          ? {}
-          : { branchSupplementalFacts: branchFacts.supplementalFacts }),
-        ...(input.newSupplementalFacts === undefined
-          ? {}
-          : { newSupplementalFacts: input.newSupplementalFacts }),
         ...(factOverrides === undefined ? {} : { factOverrides }),
         ...(retrieval === undefined ? {} : { retrieval }),
         comments,
         config: {
-          defaults: DEFAULT_GENERATION_CONFIG,
+          defaults: this.readDefaultGenerationConfig(project.profile),
           ...(Object.keys(user.config).length === 0 ? {} : { user: user.config }),
           ...(Object.keys(project.projectConfig).length === 0
             ? {}
@@ -878,7 +873,7 @@ export class ProjectService {
       const user = await this.#userConfig.get();
       return resolveGenerationConfig({
         profile: project.profile,
-        defaults: DEFAULT_GENERATION_CONFIG,
+        defaults: this.readDefaultGenerationConfig(project.profile),
         user: user.config,
         project: project.projectConfig,
         ...(input.taskConfig === undefined ? {} : { task: input.taskConfig }),
@@ -1071,7 +1066,6 @@ export class ProjectService {
         'preparing',
         'requesting',
         'processing',
-        'supplement',
         'reviewing',
         'saving',
       ].includes(task.status),
@@ -1210,8 +1204,30 @@ export class ProjectService {
       throw new SafeMainError(this.#conflict());
   }
 
-  #publisher(profile: ProjectAggregateV1['profile'], minutes: string): string {
-    if (profile === 'official') return '示例学院';
+  readDefaultGenerationConfig(profile: ProjectAggregateV1['profile']): GenerationConfigValues {
+    const snapshot = this.#profileSnapshot;
+    let targetChannel = DEFAULT_GENERATION_CONFIG.targetChannel;
+    if (snapshot !== undefined) {
+      if (profile === 'official' && snapshot.targetChannels[0] !== undefined) {
+        targetChannel = snapshot.targetChannels[0];
+      } else if (profile === 'other') {
+        targetChannel = '目标平台';
+      }
+    }
+    return {
+      ...DEFAULT_GENERATION_CONFIG,
+      targetChannel,
+      ...(snapshot?.defaultWordCountRecommendation !== undefined
+        ? { maxWords: snapshot.defaultWordCountRecommendation }
+        : {}),
+    };
+  }
+
+  #publisher(project: ProjectAggregateV1, minutes: string): string {
+    if (project.profile === 'official') {
+      const effective = project.profileSnapshot ?? this.#profileSnapshot;
+      return effective?.officialPublisher ?? '示例学院';
+    }
     const section = /\[主体\]\s*\n+([^\n]+)/u.exec(minutes)?.[1]?.trim();
     const signature = /落款使用[“"]([^”"]+)[”"]/u.exec(minutes)?.[1]?.trim();
     const publisher = section ?? signature;
@@ -1279,10 +1295,6 @@ export class ProjectService {
         minutes: {
           revisionId: task.minutesSnapshot.revisionId,
           sha256: task.minutesSnapshot.contentRef.sha256,
-        },
-        supplement: {
-          present: task.supplementalFacts !== undefined,
-          sha256: sha256Utf8(task.supplementalFacts ?? ''),
         },
         retrieval: (() => {
           if (task.retrievalReportId === undefined)

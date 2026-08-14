@@ -52,7 +52,6 @@ const taskLabels: Record<TaskViewDto['status'], string> = {
   preparing: '正在准备',
   requesting: '正在发送请求',
   processing: 'AI 正在处理',
-  supplement: '补充信息',
   reviewing: 'AI 二次审稿',
   saving: '正在保存',
   succeeded: '已完成',
@@ -874,7 +873,6 @@ const Workspace = ({
   const [modal, setModal] = useState<
     | 'auth'
     | 'comment'
-    | 'supplement'
     | 'promptWarning'
     | 'stale'
     | 'cancel'
@@ -902,8 +900,6 @@ const Workspace = ({
   const [commentBody, setCommentBody] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [reanchorCommentId, setReanchorCommentId] = useState<string | null>(null);
-  const [supplement, setSupplement] = useState('');
-  const [supplementDismissedTaskId, setSupplementDismissedTaskId] = useState<string | null>(null);
   const [reviewEnabled, setReviewEnabled] = useState(false);
   const [retrievalEnabled, setRetrievalEnabled] = useState(true);
   const [retrievalState, setRetrievalState] = useState<
@@ -917,10 +913,16 @@ const Workspace = ({
   const [exportFields, setExportFields] = useState({ title: '', signOff: '', dateText: '' });
   const commandQueueRef = useRef<Promise<void>>(Promise.resolve());
   const commandPendingRef = useRef(false);
+  const minutesAutosaveTimerRef = useRef<number | null>(null);
   const editMinutesDraft = (value: string): void => {
     const action = { type: 'editMinutes' as const, value };
     stateRef.current = workspaceReducer(stateRef.current, action);
     dispatch(action);
+    if (minutesAutosaveTimerRef.current !== null) window.clearTimeout(minutesAutosaveTimerRef.current);
+    minutesAutosaveTimerRef.current = window.setTimeout(() => {
+      minutesAutosaveTimerRef.current = null;
+      saveMinutes();
+    }, 800);
   };
 
   const enqueue = useCallback((name: string, operation: () => Promise<void>): void => {
@@ -1057,10 +1059,6 @@ const Workspace = ({
     };
   }, [previewRevision, previewSessionId, taskConfig, userConfig?.revision]);
 
-  const showSupplementModal =
-    activeTask?.status === 'supplement' &&
-    (modal === 'supplement' || (modal === null && supplementDismissedTaskId !== activeTask.id));
-
   const saveMinutes = (): void =>
     enqueue('save-minutes', async () => {
       const current = stateRef.current;
@@ -1191,9 +1189,6 @@ const Workspace = ({
             ...(kind === 'draftGeneration' && preparedRetrievalId
               ? { retrievalReportId: preparedRetrievalId as never }
               : {}),
-            ...(kind === 'aiReview' && supplement.trim()
-              ? { newSupplementalFacts: supplement.trim() }
-              : {}),
             ...(priorFactOverrides ? { factOverrides: priorFactOverrides as never } : {}),
             ...(Object.keys(taskConfig).length ? { taskConfig } : {}),
           }),
@@ -1245,14 +1240,9 @@ const Workspace = ({
       return;
     }
     if (prompt.preparation.risks.length > 0 && !risksAcknowledged) {
-      const supplementConflict = prompt.preparation.risks.some(
-        (risk) => risk.code === 'SUPPLEMENT_CONFLICT',
-      );
       requestConfirmation(
         '确认生成风险',
-        supplementConflict
-          ? '本次补充事实与当前版本事实链存在冲突。请先核对来源；继续将把冲突内容作为本轮明确确认的输入。'
-          : 'Prompt 检测到缺失信息。这些提示只是线索，不是事实证明。',
+        'Prompt 检测到缺失信息。这些提示只是线索，不是事实证明。',
         '已了解并继续',
         () => startTask(resolution, true, duplicateAcknowledged),
         true,
@@ -1276,9 +1266,6 @@ const Workspace = ({
             ? { retrievalReportId: draft.preparation.trace.retrieval.reportId }
             : {}),
           retrievalEnabled: draft.preparation.trace.retrieval.state !== 'notUsed',
-          ...(draft.preparation.purpose === 'aiReview' && supplement.trim()
-            ? { newSupplementalFacts: supplement.trim() }
-            : {}),
           factOverrides: serializeFactOverrides(draft.factOverrides) as never,
           ...(Object.keys(taskConfig).length ? { taskConfig } : {}),
           messages: [{ role: 'user', content: draft.value }],
@@ -2135,7 +2122,6 @@ const Workspace = ({
                 'preparing',
                 'requesting',
                 'processing',
-                'supplement',
                 'reviewing',
               ].includes(activeTask.status) && (
                 <button onClick={() => setModal('cancel')}>取消任务</button>
@@ -2270,59 +2256,6 @@ const Workspace = ({
                 onClick={editingCommentId ? editComment : addComment}
               >
                 {isReanchoring ? '确认重新标定' : '保存批注'}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-      {showSupplementModal && activeTask?.status === 'supplement' && (
-        <Modal
-          title="补充信息"
-          onClose={() => {
-            setModal(null);
-            setSupplementDismissedTaskId(activeTask.id);
-          }}
-        >
-          <div className="form-stack">
-            <p>首轮 AI 输出已完成。请补充已确认的事实；没有需要补充的信息也可以直接继续。</p>
-            <label>
-              补充事实（可选）
-              <textarea
-                autoFocus
-                value={supplement}
-                onChange={(event) => setSupplement(event.target.value)}
-              />
-            </label>
-            <div className="modal-actions">
-              <button
-                onClick={() => {
-                  setModal(null);
-                  setSupplementDismissedTaskId(activeTask.id);
-                }}
-              >
-                稍后填写
-              </button>
-              <button
-                className="primary"
-                onClick={() => {
-                  enqueue('provide-supplement', async () => {
-                    const current = stateRef.current;
-                    unwrap(
-                      await window.newsWriter.tasks.provideSupplement({
-                        sessionId: current.view.sessionId,
-                        expectedRevision: current.view.revision,
-                        taskId: activeTask.id,
-                        supplementalFacts: supplement,
-                      }),
-                    );
-                    setModal(null);
-                    setSupplementDismissedTaskId(null);
-                    setSupplement('');
-                    hydrate();
-                  });
-                }}
-              >
-                开始 AI 二次审稿
               </button>
             </div>
           </div>

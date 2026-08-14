@@ -300,9 +300,7 @@ const draftInput = (sessionId: Parameters<ProjectService['getOwned']>[0]) => ({
   editWarningAcknowledged: true,
   promptInputFingerprint: sha256Schema.parse('0'.repeat(64)),
   staleResolution: 'continued' as const,
-  acknowledgedRiskCodes: ['MISSING_FACTS', 'SUPPLEMENT_CONFLICT'] as (
-    'MISSING_FACTS' | 'SUPPLEMENT_CONFLICT'
-  )[],
+  acknowledgedRiskCodes: ['MISSING_FACTS'] as 'MISSING_FACTS'[],
 });
 
 const terminalBarrier = (tasks: TaskHostService) => {
@@ -355,7 +353,6 @@ describe('TaskHostService', () => {
       promptId: queued.promptId,
       configSnapshot: queued.configSnapshot,
       minutes: queued.minutes,
-      supplement: queued.supplement,
       retrieval: queued.retrieval,
       comments: queued.comments,
     });
@@ -840,7 +837,7 @@ describe('TaskHostService', () => {
     await projects.closeAll();
   });
 
-  it('inherits supplemental facts only from the selected parent branch', async () => {
+  it('inherits fact overrides only from the selected parent branch', async () => {
     const runner = new ImmediateRunner({
       id: 'branch-response',
       model: 'deepseek-v4-pro',
@@ -851,7 +848,6 @@ describe('TaskHostService', () => {
     const runCurrent = async (
       kind: 'draftGeneration' | 'aiReview',
       parentVersionId: ReturnType<typeof versionIdSchema.parse> | null,
-      newSupplementalFacts?: string,
       factOverrides?: {
         location?: { mode: 'auto' } | { mode: 'manual'; value: string } | { mode: 'none' };
       },
@@ -862,7 +858,6 @@ describe('TaskHostService', () => {
         expectedRevision: revision,
         kind,
         parentVersionId,
-        ...(newSupplementalFacts === undefined ? {} : { newSupplementalFacts }),
         ...(factOverrides === undefined ? {} : { factOverrides }),
       };
       const prepared = await projects.preparePrompt(prepareInput, 20);
@@ -883,12 +878,9 @@ describe('TaskHostService', () => {
       return projects.getOwned(view.sessionId, 20).aggregate.latestVersionId!;
     };
     const rootVersion = await runCurrent('draftGeneration', null);
-    const branchA = await runCurrent(
-      'aiReview',
-      rootVersion,
-      '活动地点：A分支会场',
-      { location: { mode: 'manual', value: 'A分支会场' } },
-    );
+    const branchA = await runCurrent('aiReview', rootVersion, {
+      location: { mode: 'manual', value: 'A分支会场' },
+    });
     let aggregate = projects.getOwned(view.sessionId, 20).aggregate;
     await projects.setLatestVersion(
       {
@@ -898,7 +890,9 @@ describe('TaskHostService', () => {
       },
       20,
     );
-    const branchB = await runCurrent('aiReview', rootVersion, '活动地点：B分支会场');
+    const branchB = await runCurrent('aiReview', rootVersion, {
+      location: { mode: 'manual', value: 'B分支会场' },
+    });
     aggregate = projects.getOwned(view.sessionId, 20).aggregate;
     await projects.setLatestVersion(
       {
@@ -931,7 +925,7 @@ describe('TaskHostService', () => {
       20,
     );
     expect(clearedFromA.factOverrides?.location).toEqual({ mode: 'auto' });
-    expect(clearedFromA.messages[0].content).toContain('继续自动识别');
+    expect(clearedFromA.messages[0].content).not.toContain('A分支会场');
     expect(branchB).not.toBe(branchA);
     await projects.setLatestVersion(
       {

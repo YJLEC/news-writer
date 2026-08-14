@@ -14,14 +14,14 @@ const RULES: readonly {
   replacement: string;
 }[] = [
   {
-    category: 'apiKey',
-    pattern: /\b(?:bearer\s+)?(?:sk-[a-z0-9_-]{16,}|[a-z0-9_-]{32,})\b/giu,
-    replacement: '[已脱敏凭据]',
-  },
-  {
     category: 'email',
     pattern: /\b[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+\b/giu,
     replacement: '[已脱敏邮箱]',
+  },
+  {
+    category: 'apiKey',
+    pattern: /\b(?:bearer\s+)?(?:sk-[a-z0-9_-]{16,}|[a-z0-9_-]{32,})\b/giu,
+    replacement: '[已脱敏凭据]',
   },
   {
     category: 'identityNumber',
@@ -30,12 +30,12 @@ const RULES: readonly {
   },
   {
     category: 'phone',
-    pattern: /(?<!\d)1[3-9]\d{9}(?!\d)/gu,
+    pattern: /(?<!\d)(?:1[3-9]\d{9}|1[3-9]\d[-\s]\d{4}[-\s]\d{4}|0\d{2,3}-\d{7,8})(?!\d)/gu,
     replacement: '[已脱敏手机号]',
   },
   {
     category: 'studentNumber',
-    pattern: /(?<!\d)(?:学号\s*[:：]?\s*)?\d{10,12}(?!\d)/gu,
+    pattern: /学号\s*[:：]?\s*\d{10,12}(?!\d)/gu,
     replacement: '[已脱敏学号]',
   },
   {

@@ -66,6 +66,14 @@ export const startDesktop = (workerRunner: WorkerRunner): void => {
       );
     } catch {
       institutionBundle = undefined;
+      diagnostics.record({
+        name: 'institution-profile-invalid',
+        errorCode: 'PROFILE_RESOURCE_INVALID',
+      });
+      dialog.showErrorBox(
+        '机构配置资源无效',
+        '内置机构配置资源缺失、被篡改或校验失败。应用将在无机构配置的情况下运行，且无法写入机构专属项目。',
+      );
     }
     let documentStyleTokens: DocumentStyleTokens | undefined;
     if (institutionBundle !== undefined) {
@@ -73,6 +81,14 @@ export const startDesktop = (workerRunner: WorkerRunner): void => {
         documentStyleTokens = documentStyleToTokens(institutionBundle.documentStyle);
       } catch {
         institutionBundle = undefined;
+        diagnostics.record({
+          name: 'institution-profile-invalid',
+          errorCode: 'PROFILE_RESOURCE_INVALID',
+        });
+        dialog.showErrorBox(
+          '机构配置资源无效',
+          '内置机构配置资源的文档样式无法解析。应用将在无机构配置的情况下运行。',
+        );
       }
     }
     const knowledgeBundle: ValidatedKnowledgeBundleV1 | undefined = institutionBundle?.knowledge;
@@ -87,6 +103,10 @@ export const startDesktop = (workerRunner: WorkerRunner): void => {
             documentStyleVersion: institutionBundle.manifest.documentStyleVersion,
             knowledgeVersion: institutionBundle.manifest.knowledgeVersion,
             resourceHash: institutionBundle.manifest.bundleContentSha256,
+            officialPublisher: institutionBundle.institution.officialPublisher,
+            targetChannels: institutionBundle.institution.targetChannels,
+            defaultWordCountRecommendation:
+              institutionBundle.institution.defaultWordCountRecommendation,
             rules: institutionBundle.writingRules.rules.map((rule) => rule.text),
             promptSections: institutionBundle.promptContract.sections,
           } as const);
@@ -226,8 +246,6 @@ export const startDesktop = (workerRunner: WorkerRunner): void => {
       },
       [IPC_CHANNELS.tasksCancel]: async (input, ownerId) =>
         await taskHost!.cancel(input as never, ownerId),
-      [IPC_CHANNELS.tasksProvideSupplement]: async (input, ownerId) =>
-        await taskHost!.provideSupplement(input as never, ownerId),
       [IPC_CHANNELS.documentsExportWithDialog]: async (input, ownerId) =>
         await projectService!.exportDocumentWithDialog(input as never, ownerId),
     };

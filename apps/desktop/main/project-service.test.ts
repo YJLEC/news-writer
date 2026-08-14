@@ -197,7 +197,6 @@ const persistActiveTask = async (
             status,
             successTransactionId: randomUUID(),
             proposedVersionId: versionIdSchema.parse(randomUUID()),
-            targetRevision: current.revision + 2,
           }
         : { status },
       current.revision,

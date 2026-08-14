@@ -130,7 +130,7 @@ test('starts with a sandboxed renderer and a narrow preload bridge', async () =>
       prompts: ['prepare'],
       settings: ['getUserConfig', 'updateUserConfig', 'previewConfig'],
       retrieval: ['search'],
-      tasks: ['start', 'cancel', 'provideSupplement', 'onStatus'],
+      tasks: ['start', 'cancel', 'onStatus'],
       documents: ['exportWithDialog'],
     });
     expect(rendererBoundary.nodeProcessType).toBe('undefined');

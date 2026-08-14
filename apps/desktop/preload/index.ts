@@ -64,7 +64,6 @@ const api: NewsWriterApiV1 = {
   tasks: Object.freeze({
     start: async (input) => await invoke(IPC_CHANNELS.tasksStart, input),
     cancel: async (input) => await invoke(IPC_CHANNELS.tasksCancel, input),
-    provideSupplement: async (input) => await invoke(IPC_CHANNELS.tasksProvideSupplement, input),
     onStatus: (listener: (event: TaskStatusEventDto) => void) => {
       const schema: z.ZodType<TaskStatusEventDto> =
         IPC_EVENT_CONTRACTS[IPC_CHANNELS.tasksStatusEvent];

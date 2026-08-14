@@ -224,7 +224,6 @@ const api = () => ({
         trace: {
           minutes: { revisionId, sha256: fingerprint },
           parent: null,
-          supplement: { present: false, sha256: fingerprint },
           retrieval: { state: 'notUsed' as const },
           comments: { count: 0, sha256: fingerprint },
           writingRulesVersion: 'prompt-contract-v1' as const,
@@ -236,7 +235,6 @@ const api = () => ({
   tasks: {
     start: vi.fn(),
     cancel: vi.fn(),
-    provideSupplement: vi.fn(),
     onStatus: vi.fn(() => () => undefined),
   },
   documents: {
@@ -434,46 +432,6 @@ describe('App', () => {
     fireEvent.change(commentInput, { target: { value: '补充' } });
     expect(document.activeElement).toBe(commentInput);
     expect(commentInput.value).toBe('补充');
-  });
-
-  it('opens the supplement dialog and keeps its textarea focused while typing', async () => {
-    const supplementView = {
-      ...commentedView,
-      tasks: [
-        {
-          id: '10000000-0000-4000-8000-000000000013',
-          kind: 'aiReview',
-          status: 'supplement',
-          createdAt: '2026-08-10T01:00:03.000000Z',
-          updatedAt: '2026-08-10T01:00:04.000000Z',
-          history: [
-            { status: 'queued', at: '2026-08-10T01:00:03.000000Z' },
-            { status: 'preparing', at: '2026-08-10T01:00:03.100000Z' },
-            { status: 'requesting', at: '2026-08-10T01:00:03.200000Z' },
-            { status: 'processing', at: '2026-08-10T01:00:03.300000Z' },
-            { status: 'supplement', at: '2026-08-10T01:00:04.000000Z' },
-          ],
-          configSnapshot: {
-            values: { model: 'deepseek-v4-pro', reasoningEffort: 'high' },
-            sources: { model: 'default', reasoningEffort: 'default' },
-          },
-        },
-      ],
-    } as unknown as ProjectViewDto;
-    bridge.projects.openWithDialog.mockResolvedValue(
-      ok({ cancelled: false as const, data: supplementView }),
-    );
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: /打开项目/ }));
-    await screen.findByRole('dialog', { name: '补充信息' });
-    const supplementInput = screen.getByLabelText<HTMLTextAreaElement>('补充事实（可选）');
-    expect(document.activeElement).toBe(supplementInput);
-    fireEvent.change(supplementInput, { target: { value: '事' } });
-    fireEvent.change(supplementInput, { target: { value: '事实' } });
-    expect(document.activeElement).toBe(supplementInput);
-    expect(supplementInput.value).toBe('事实');
-    fireEvent.click(screen.getByRole('button', { name: '稍后填写' }));
-    expect(screen.queryByRole('dialog', { name: '补充信息' })).toBeNull();
   });
 
   it('shows trusted resolved configuration sources and marks Prompt stale after task override', async () => {

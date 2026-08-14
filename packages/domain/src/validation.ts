@@ -200,13 +200,6 @@ export const validateProjectAggregate = (
     ) {
       issues.push({ code: 'TASK_PARENT_INVALID', path: `tasks.${index}`, message: '' });
     }
-    if (task.status === 'saving' && task.targetRevision !== project.revision + 1) {
-      issues.push({
-        code: 'TASK_TARGET_REVISION_INVALID',
-        path: `tasks.${index}.targetRevision`,
-        message: 'Saving task target must be the next project revision',
-      });
-    }
     if (
       task.kind === 'commentRevision' &&
       task.commentSnapshot.some((comment) => comment.versionId !== task.parentVersionId)

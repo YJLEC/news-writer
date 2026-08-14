@@ -273,7 +273,6 @@ describe('domain and project task integration', () => {
                 status: 'saving',
                 successTransactionId,
                 proposedVersionId,
-                targetRevision: aggregate.revision + 2,
               },
               aggregate.revision,
               clock.now(),

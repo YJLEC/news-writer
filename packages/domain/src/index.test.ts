@@ -168,7 +168,6 @@ const queueAndComplete = (
       status: 'saving',
       successTransactionId: uuid(200 + versionNumber),
       proposedVersionId,
-      targetRevision: project.revision + 2,
     },
     project.revision,
     clock.now(),
@@ -195,7 +194,6 @@ const queueDraftTask = (
   project: ReturnType<typeof setupProject>['project'],
   ids: FixedIds,
   clock: FixedClock,
-  supplementalFacts?: string,
 ) => {
   const promptText = 'draft prompt';
   const promptRef = ref(
@@ -216,7 +214,6 @@ const queueDraftTask = (
         staleResolution: 'current',
       },
       config: { defaults },
-      ...(supplementalFacts === undefined ? {} : { supplementalFacts }),
     },
     project.revision,
     { ids, clock, runtime },
@@ -406,7 +403,6 @@ describe('domain workflow', () => {
         status: 'saving',
         successTransactionId: uuid(601),
         proposedVersionId,
-        targetRevision: current.revision + 2,
       },
       current.revision,
       clock.now(),
@@ -487,7 +483,6 @@ describe('domain workflow', () => {
         status: 'saving',
         successTransactionId: uuid(610),
         proposedVersionId: parseVersionId(uuid(611)),
-        targetRevision: current.revision + 2,
       },
       current.revision,
       clock.now(),
@@ -506,47 +501,7 @@ describe('domain workflow', () => {
     expect(current.tasks[0]?.status).toBe('failed');
     expect(current.tasks[0]?.history.at(-2)?.status).toBe('saving');
     expect(current.tasks[0]).not.toHaveProperty('proposedVersionId');
-    expect(current.tasks[0]).not.toHaveProperty('targetRevision');
     expect(current.versions).toHaveLength(0);
-  });
-
-  it('allows confirmed supplemental facts only for review and revision tasks', () => {
-    const { project, ids, clock, minutesText } = setupProject();
-    expect(() => queueDraftTask(project, ids, clock, '初稿不得注入补充事实')).toThrow();
-
-    const completed = queueAndComplete(
-      project,
-      new FixedIds(),
-      new FixedClock(),
-      'draftGeneration',
-      1,
-      new Map([[project.minutes.contentRef.relativePath, minutesText]]),
-    );
-    const promptText = 'review prompt';
-    const promptRef = ref(
-      'content/prompts/review/0.txt',
-      promptText,
-      contentHash(promptText),
-      'text/plain',
-    );
-    const queued = queueTask(
-      completed.project,
-      {
-        kind: 'aiReview',
-        messages: [{ role: 'user', contentRef: promptRef }],
-        editedByUser: false,
-        upstream: {
-          promptInputFingerprint: contentHash(promptText),
-          currentInputFingerprint: contentHash(promptText),
-          staleResolution: 'current',
-        },
-        config: { defaults },
-        supplementalFacts: '经用户确认的合成补充事实',
-      },
-      completed.project.revision,
-      { ids, clock, runtime },
-    );
-    expect(queued.tasks.at(-1)?.supplementalFacts).toBe('经用户确认的合成补充事实');
   });
 
   it('persists structured fact overrides with queued tasks', () => {
@@ -617,7 +572,6 @@ describe('domain workflow', () => {
         status: 'saving',
         successTransactionId: uuid(700),
         proposedVersionId: parseVersionId(uuid(701)),
-        targetRevision: queued.revision + 2,
       },
       queued.revision,
       clock.now(),
@@ -914,23 +868,11 @@ describe('domain workflow', () => {
         status: 'saving',
         successTransactionId: uuid(750),
         proposedVersionId: parseVersionId(uuid(751)),
-        targetRevision: current.revision + 2,
       },
       current.revision,
       clock.now(),
       runtime,
     );
-    expect(
-      validateProjectAggregate({
-        ...current,
-        tasks: [
-          {
-            ...current.tasks[0],
-            targetRevision: current.revision + 2,
-          },
-        ],
-      }).some((issue) => issue.code === 'TASK_TARGET_REVISION_INVALID'),
-    ).toBe(true);
     expect(() =>
       transitionTask(
         current,

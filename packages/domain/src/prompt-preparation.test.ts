@@ -102,7 +102,7 @@ describe('Prompt preparation', () => {
     expect(prepared.messages[0]?.content).not.toContain('日期“日期未提供”');
   });
 
-  it('includes an immutable institution snapshot as additive guidance', async () => {
+  it('includes institution writing rules as authoritative guidance', async () => {
     const minutes = await read('tests/fixtures/minutes/gf-01-official-complete.md');
     const prepared = preparePrompt(
       {
@@ -125,6 +125,9 @@ describe('Prompt preparation', () => {
           documentStyleVersion: 'style-v1',
           knowledgeVersion: 'kw_0000000000000000_0000000000000000',
           resourceHash: sha256Utf8('synthetic-profile'),
+          officialPublisher: 'Synthetic Publisher',
+          targetChannels: ['Website'],
+          defaultWordCountRecommendation: 1200,
           rules: ['Prefer concise factual leads.'],
           promptSections: {
             initialDraft: 'Use the profile title convention.',
@@ -135,9 +138,9 @@ describe('Prompt preparation', () => {
       },
       { sha256Utf8 },
     );
-    expect(prepared.messages[0]?.content).toContain('profile_synthetic-public');
+    expect(prepared.messages[0]?.content).toContain('机构写作规范（必须遵守）');
     expect(prepared.messages[0]?.content).toContain('Prefer concise factual leads.');
-    expect(prepared.messages[0]?.content).toContain('不能关闭系统事实边界');
+    expect(prepared.messages[0]?.content).toContain('硬性写作要求');
   });
 
   it('matches the official generation golden byte for byte', async () => {
@@ -209,12 +212,11 @@ describe('Prompt preparation', () => {
       ...common(minutes, 'official', '示例学院'),
       kind: 'aiReview',
       parent: { versionId: versionId(), contentSha256: sha256Utf8(draft), content: draft },
-      newSupplementalFacts: '活动地点：图书馆研讨室 C203。',
       comments: [],
       config: { defaults: DEFAULT_GENERATION_CONFIG, task: { maxWords: 800 } },
     };
     expect(preparePrompt(input, { sha256Utf8 }).messages[0]?.content).toBe(
-      await read('tests/golden/prompts/gf-03-review-with-supplement.txt'),
+      await read('tests/golden/prompts/gf-03-review.txt'),
     );
   });
 
@@ -285,27 +287,11 @@ describe('Prompt preparation', () => {
     expect(prepared.messages[0]?.content).toContain('A&amp;B &lt;C&gt;');
   });
 
-  it('returns a blocking risk for conflicting supplemental facts', () => {
-    const minutes = '活动日期：2099年1月1日\n活动地点：A101\n举办单位：测试单位\n';
-    const draft = '标题\n\n正文\n';
-    const prepared = preparePrompt(
-      {
-        ...common(minutes, 'official', '测试单位'),
-        kind: 'aiReview',
-        parent: { versionId: versionId(), contentSha256: sha256Utf8(draft), content: draft },
-        newSupplementalFacts: '活动地点：B202',
-        comments: [],
-      },
-      { sha256Utf8 },
-    );
-    expect(prepared.risks.map((risk) => risk.code)).toContain('SUPPLEMENT_CONFLICT');
-  });
-
   it.each([
-    ['official', '活动纪要和父版本事实来源链中的已确认补充信息', false],
-    ['other', '活动纪要中的[活动内容]和父版本事实来源链中的已确认补充信息', true],
+    ['official', '活动纪要是本次修订的事实来源。', false],
+    ['other', '活动纪要中的[活动内容]是本次修订的事实来源。', true],
   ] as const)(
-    'renders a consistent %s revision boundary with inherited facts',
+    'renders a consistent %s revision boundary without supplemental facts',
     (profile, expected, expectsSections) => {
       const minutes =
         profile === 'official'
@@ -319,7 +305,6 @@ describe('Prompt preparation', () => {
           ...common(minutes, profile, profile === 'official' ? '测试学院' : '测试实践队'),
           kind: 'commentRevision',
           parent: { versionId: versionId(), contentSha256: sha256Utf8(draft), content: draft },
-          branchSupplementalFacts: '活动时间：09:00',
           comments: [
             {
               id: commentIdSchema.parse('00000000-0000-4000-8000-000000000091'),
@@ -342,13 +327,12 @@ describe('Prompt preparation', () => {
       );
       const content = prepared.messages[0].content;
       expect(content).toContain(expected);
-      expect(content).toContain('活动时间：09:00');
-      expect(content).not.toContain('本次没有补充信息');
+      expect(content).not.toContain('补充信息');
       expect(content.includes('[活动背景]')).toBe(expectsSections);
     },
   );
 
-  it('keeps the no-supplement revision statement aligned with its material block', () => {
+  it('states the revision fact source boundary without supplement blocks', () => {
     const minutes = '[主体]\n测试实践队\n\n[活动内容]\n2099年1月1日，测试实践队在A101开展活动。\n';
     const draft = '标题\n\n正文。\n';
     const prepared = preparePrompt(
@@ -376,8 +360,11 @@ describe('Prompt preparation', () => {
       },
       { sha256Utf8 },
     );
-    expect(prepared.messages[0].content).toContain('本次无补充信息。');
-    expect(prepared.messages[0].content).toContain('本次没有补充信息。');
+    const content = prepared.messages[0].content;
+    expect(content).toContain('活动纪要中的[活动内容]是本次修订的事实来源。');
+    expect(content).not.toContain('<supplement>');
+    expect(content).not.toContain('本次无补充信息');
+    expect(content).not.toContain('本次没有补充信息');
   });
 
   it.each(['draftGeneration', 'aiReview'] as const)(

@@ -62,7 +62,6 @@ const resolvedConfig = {
 const trace = {
   minutes: { revisionId: ids.minuteRevision, sha256: hash },
   parent: null,
-  supplement: { present: false, sha256: hash },
   retrieval: { state: 'unavailable' },
   comments: { count: 0, sha256: hash },
   writingRulesVersion: 'writing-v1',
@@ -74,6 +73,9 @@ const trace = {
     documentStyleVersion: 'document-style-v1',
     knowledgeVersion: 'kw_synthetic_v1',
     resourceHash: hash,
+    officialPublisher: 'Synthetic Publisher',
+    targetChannels: ['Website'],
+    defaultWordCountRecommendation: 1200,
     rules: ['Use only supplied facts.'],
     promptSections: {
       initialDraft: 'Prepare an initial draft.',
@@ -148,7 +150,6 @@ const project = {
       history: [{ status: 'succeeded', at }],
       configSnapshot: resolvedConfig,
       minutes: trace.minutes,
-      supplement: trace.supplement,
       retrieval: trace.retrieval,
       comments: trace.comments,
       resultVersionId: ids.version,
@@ -226,11 +227,6 @@ const requests: Record<string, unknown> = {
     acknowledgedRiskCodes: [],
   },
   [IPC_CHANNELS.tasksCancel]: { ...session, taskId: ids.task },
-  [IPC_CHANNELS.tasksProvideSupplement]: {
-    ...session,
-    taskId: ids.task,
-    supplementalFacts: '已确认补充信息',
-  },
   [IPC_CHANNELS.documentsExportWithDialog]: { ...session, versionId: ids.version },
 };
 
@@ -300,7 +296,6 @@ const data: Record<string, unknown> = {
   },
   [IPC_CHANNELS.tasksStart]: project.tasks[0],
   [IPC_CHANNELS.tasksCancel]: { disposition: 'accepted' },
-  [IPC_CHANNELS.tasksProvideSupplement]: project.tasks[0],
   [IPC_CHANNELS.documentsExportWithDialog]: {
     cancelled: false,
     project,
@@ -322,7 +317,7 @@ describe('IPC contracts', () => {
   it('has a unique, fixed channel for every invoke and event', () => {
     const names = Object.values(IPC_CHANNELS);
     expect(new Set(names).size).toBe(names.length);
-    expect(Object.keys(IPC_INVOKE_CONTRACTS)).toHaveLength(27);
+    expect(Object.keys(IPC_INVOKE_CONTRACTS)).toHaveLength(26);
     expect(Object.keys(IPC_EVENT_CONTRACTS)).toEqual([IPC_CHANNELS.tasksStatusEvent]);
     expect(names.every((name) => name.startsWith('nw:v1:'))).toBe(true);
   });

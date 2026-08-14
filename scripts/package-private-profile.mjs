@@ -156,7 +156,7 @@ const main = async () => {
   } finally {
     await rm(tempConfig, { force: true });
   }
-  const packagedProfile = path.join(output, 'resources', 'institution');
+  const packagedProfile = path.join(output, 'win-unpacked', 'resources', 'institution');
   const packagedFiles = await listProfileFiles(packagedProfile);
   if (
     packagedFiles.length !== files.length ||
