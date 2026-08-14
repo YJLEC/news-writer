@@ -414,9 +414,9 @@ describe('App', () => {
     await waitFor(() => expect(bridge.prompts.prepare).toHaveBeenCalledTimes(1));
     expect(await screen.findByText('受信任 Prompt')).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: '编辑 Prompt' }));
-    expect(screen.getByText(/修改可能破坏事实约束/)).toBeDefined();
+    expect(screen.getByText(/可能破坏事实约束/)).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: /我已了解/ }));
-    expect(screen.queryByText(/修改可能破坏事实约束/)).toBeNull();
+    expect(screen.queryByText(/可能破坏事实约束/)).toBeNull();
   });
 
   it('keeps the comment textarea focused while typing', async () => {

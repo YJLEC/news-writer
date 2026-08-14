@@ -913,6 +913,39 @@ const Workspace = ({
   const [exportFields, setExportFields] = useState({ title: '', signOff: '', dateText: '' });
   const commandQueueRef = useRef<Promise<void>>(Promise.resolve());
   const commandPendingRef = useRef(false);
+  const [editorSplit, setEditorSplit] = useState(0.5);
+  const [commentsWidth, setCommentsWidth] = useState(300);
+  const editorWorkspaceRef = useRef<HTMLElement>(null);
+  const beginPaneResize =
+    (kind: 'editor' | 'comments') =>
+    (event: React.PointerEvent<HTMLDivElement>): void => {
+      event.preventDefault();
+      const startX = event.clientX;
+      const startSplit = editorSplit;
+      const startCommentsWidth = commentsWidth;
+      const rect = editorWorkspaceRef.current?.getBoundingClientRect();
+      const onMove = (moveEvent: PointerEvent): void => {
+        const dx = moveEvent.clientX - startX;
+        if (kind === 'editor') {
+          if (!rect || rect.width <= 0) return;
+          const ratio = Math.min(
+            0.8,
+            Math.max(0.2, (startSplit * rect.width + dx) / rect.width),
+          );
+          setEditorSplit(ratio);
+        } else {
+          setCommentsWidth(Math.min(640, Math.max(200, startCommentsWidth - dx)));
+        }
+      };
+      const onUp = (): void => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        document.body.style.cursor = '';
+      };
+      document.body.style.cursor = 'col-resize';
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    };
   const minutesAutosaveTimerRef = useRef<number | null>(null);
   const editMinutesDraft = (value: string): void => {
     const action = { type: 'editMinutes' as const, value };
@@ -1558,7 +1591,14 @@ const Workspace = ({
   const leftUri = `inmemory://news-writer/session/${state.view.sessionId}/${state.leftDocument}/${state.leftDocument === 'history' ? (selected?.id ?? 'empty') : 'draft'}`;
 
   return (
-    <main className={`workspace ${state.commentsOpen ? 'comments-visible' : ''}`}>
+    <main
+      className={`workspace ${state.commentsOpen ? 'comments-visible' : ''}`}
+      style={
+        state.commentsOpen
+          ? { gridTemplateColumns: `44px minmax(0, 1fr) ${commentsWidth}px` }
+          : undefined
+      }
+    >
       <AppMenu
         onNew={() => leaveFor(onNew)}
         onOpen={() => leaveFor(onOpen)}
@@ -1647,7 +1687,13 @@ const Workspace = ({
           </>
         )}
       </aside>
-      <section className="editor-workspace">
+      <section
+        className="editor-workspace"
+        ref={editorWorkspaceRef}
+        style={{
+          gridTemplateColumns: `${editorSplit * 100}% 6px ${(1 - editorSplit) * 100}%`,
+        }}
+      >
         <article className="editor-pane" data-focus-zone="left" tabIndex={-1}>
           <header>
             <div className="tabs" role="tablist">
@@ -1700,24 +1746,19 @@ const Workspace = ({
           </header>
           <div className="editor-body">
           {state.leftDocument === 'prompt' && state.prompt && (
-            <details className="prompt-system" open>
-              <summary>
+            <div className="prompt-system">
+              <div className="prompt-system-label">
                 系统与机构写作规范（{state.prompt.unlocked ? '可编辑' : '只读'}）
-              </summary>
-              {state.prompt.unlocked ? (
-                <textarea
-                  className="prompt-system-editor"
-                  value={state.prompt.systemContent}
-                  readOnly={state.view.status === 'archived'}
-                  onChange={(event) =>
-                    dispatch({ type: 'editSystemPrompt', value: event.target.value })
-                  }
-                  aria-label="系统与机构写作规范"
-                />
-              ) : (
-                <pre className="prompt-system-preview">{state.prompt.systemContent}</pre>
-              )}
-            </details>
+              </div>
+              <MonacoTextEditor
+                ariaLabel="系统与机构写作规范"
+                uri={`${leftUri}/system`}
+                value={state.prompt.systemContent}
+                readOnly={leftReadOnly}
+                onChange={(value) => dispatch({ type: 'editSystemPrompt', value })}
+                tabFocusMode={tabFocusMode}
+              />
+            </div>
           )}
           <MonacoTextEditor
             ariaLabel="左侧编辑器"
@@ -1749,6 +1790,13 @@ const Workspace = ({
           />
           </div>
         </article>
+        <div
+          className="pane-divider"
+          onPointerDown={beginPaneResize('editor')}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整左右编辑栏宽度"
+        />
         <article className="editor-pane" data-focus-zone="right" tabIndex={-1}>
           <header>
             <div>
@@ -1845,6 +1893,13 @@ const Workspace = ({
           data-focus-zone="comments"
           tabIndex={-1}
         >
+          <div
+            className="pane-divider comments-divider"
+            onPointerDown={beginPaneResize('comments')}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整批注栏宽度"
+          />
           <header>
             <div>
               <h2 id="comments-heading">批注</h2>
