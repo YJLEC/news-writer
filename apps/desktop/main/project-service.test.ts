@@ -742,7 +742,10 @@ describe('ProjectService', () => {
       error = caught;
     }
     expect(error).toMatchObject({
-      safe: { code: 'IPC_PROTOCOL_INVALID', safeMessage: 'The project request is invalid' },
+      safe: {
+        code: 'CONTENT_INVALID',
+        safeMessage: 'The imported minutes file is invalid or could not be read',
+      },
     });
     if (!(error instanceof SafeMainError)) throw new Error('expected safe main error');
     expect(JSON.stringify(error.safe)).not.toContain(minutesFile);

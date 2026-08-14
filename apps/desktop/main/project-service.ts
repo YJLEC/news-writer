@@ -697,9 +697,18 @@ export class ProjectService {
     try {
       bytes = await readBoundedFile(selected, maxImportedMinutesBytes);
     } catch {
-      throw new SafeMainError(this.#protocolInvalid());
+      throw new SafeMainError(
+        this.#safe('CONTENT_INVALID', 'The imported minutes file is invalid or could not be read'),
+      );
     }
-    const content = bytes.toString('utf8');
+    let content: string;
+    try {
+      content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch {
+      throw new SafeMainError(
+        this.#safe('CONTENT_INVALID', 'The imported minutes file is not valid UTF-8 text'),
+      );
+    }
     return {
       cancelled: false as const,
       data: await this.saveMinutes({ ...input, content }, ownerId),

@@ -41,7 +41,8 @@
 
 ### 中
 
-### 中
+> 已修复：M4、M6、M12、M14、M23、M29、M33、M34（见 changelog）。M2、M24、M42 随「补充信息」功能删除而不再适用。
+
 - **M1 [domain] 批注快照与实发 Prompt 不一致（`continued` 路径）** — `commands.ts:434-447`。prepare 与 start 之间新增的批注进入任务 `commentSnapshot` 但未进入实发 Prompt。
 - **M2 [domain] 补充信息的时间冲突不检测** — `prompt-preparation.ts:356-380`。`labeledFacts` 缺「时间/活动时间」别名，时间冲突不触发 `SUPPLEMENT_CONFLICT`。
 - **M3 [shared] `startTaskDtoSchema` 与 `preparePromptDtoSchema` 校验不一致** — `ipc.ts:528-582` vs `463-488`。start 边界接受 `retrievalReportId`/`newSupplementalFacts` 的错误组合。

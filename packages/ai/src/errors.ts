@@ -52,7 +52,7 @@ export const asSafeError = (error: unknown): SafeAppError => {
   if (error instanceof DOMException && error.name === 'AbortError') {
     return makeSafeError('REQUEST_CANCELLED', 'The request was cancelled', { retryable: true });
   }
-  return makeSafeError('NETWORK_UNAVAILABLE', 'The AI service could not be reached', {
-    retryable: true,
+  return makeSafeError('PROTOCOL_INVALID', 'The AI worker encountered an unexpected error', {
+    retryable: false,
   });
 };

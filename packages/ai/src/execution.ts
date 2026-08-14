@@ -127,6 +127,7 @@ export class AiTaskCoordinator {
       }
     };
     const isFinished = (): boolean => phase === 'finished';
+    const isTerminal = (): boolean => phase === 'saving' || phase === 'finished';
     const shutdownWorker = async (): Promise<void> => {
       if (workerRun !== undefined) await workerRun.shutdown(this.#workerGraceMs);
     };
@@ -228,7 +229,7 @@ export class AiTaskCoordinator {
               return;
             }
             await raw.port.transition(status);
-            phase = status;
+            if (!isTerminal()) phase = status;
           });
         });
         workerRun.result.then(

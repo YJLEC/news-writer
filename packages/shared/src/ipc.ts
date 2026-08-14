@@ -112,6 +112,8 @@ export const generationConfigOverridesDtoSchema = ipcObject({
   targetChannel: trimmedText(120).optional(),
   maxWords: z.number().int().min(100).max(10_000).finite().optional(),
   requestTimeoutMs: z.number().int().min(1_000).max(600_000).finite().optional(),
+}).refine((value) => Object.values(value).every((entry) => entry !== undefined), {
+  message: 'Explicit undefined configuration values are invalid',
 });
 
 export const configSourcesDtoSchema = ipcObject({
@@ -199,6 +201,10 @@ export const commentViewDtoSchema = ipcObject({
   body: trimmedText(20_000),
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
+}).superRefine((comment, context) => {
+  if (comment.quotedText !== comment.anchor.exact) {
+    context.addIssue({ code: 'custom', message: 'Quoted text must equal anchor exact text' });
+  }
 });
 
 export const promptMessageDtoSchema = ipcObject({
@@ -279,7 +285,7 @@ export const exportRecordViewDtoSchema = z.union([
     versionId: versionIdSchema,
     attemptedAt: timestampSchema,
     completedAt: timestampSchema,
-    fileName: trimmedText(255),
+    fileName: trimmedText(255).refine((value) => !/[\\/:]/.test(value)),
     status: z.literal('succeeded'),
     templateVersion: trimmedText(128),
     outputSha256: sha256Schema,
@@ -294,7 +300,7 @@ export const exportRecordViewDtoSchema = z.union([
     versionId: versionIdSchema,
     attemptedAt: timestampSchema,
     completedAt: timestampSchema,
-    fileName: trimmedText(255),
+    fileName: trimmedText(255).refine((value) => !/[\\/:]/.test(value)),
     status: z.literal('failed'),
     templateVersion: trimmedText(128),
     error: safeAppErrorSchema,
