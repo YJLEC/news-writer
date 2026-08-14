@@ -550,6 +550,9 @@ kbd {
   min-height: 0;
   border-bottom: 1px solid var(--line);
 }
+.prompt-system--collapsed {
+  flex: 0 0 auto;
+}
 .prompt-system-label {
   flex: 0 0 auto;
   display: flex;

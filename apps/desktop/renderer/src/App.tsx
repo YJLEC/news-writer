@@ -1701,7 +1701,7 @@ const Workspace = ({
           </header>
           <div className="editor-body">
           {state.leftDocument === 'prompt' && state.prompt && (
-            <div className="prompt-system">
+            <div className={`prompt-system${systemOpen ? '' : ' prompt-system--collapsed'}`}>
               <button
                 className="prompt-system-label"
                 onClick={() => setSystemOpen((open) => !open)}
