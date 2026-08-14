@@ -34,6 +34,8 @@ import {
   isAnchorValid,
   projectVersions,
   workspaceReducer,
+  type FactOverrideMode,
+  type FactOverrides,
   type TextSelection,
 } from './workspaceState';
 
@@ -60,6 +62,20 @@ const taskLabels: Record<TaskViewDto['status'], string> = {
 };
 
 const countText = (value: string): number => Array.from(value.replace(/\s/g, '')).length;
+
+const factOverrideFields = ['date', 'time', 'location', 'organizer'] as const;
+
+const serializeFactOverrides = (overrides?: FactOverrides): FactOverrides | undefined => {
+  if (!overrides) return undefined;
+  const normalized = Object.fromEntries(
+    factOverrideFields.flatMap((field) => {
+      const item = overrides[field];
+      if (item === undefined) return [];
+      return [[field, item.mode === 'manual' && !item.value?.trim() ? { mode: 'auto' } : item]];
+    }),
+  ) as FactOverrides;
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
 
 const sourceLabels = { default: '默认', user: '用户', project: '项目', task: '单次' };
 const authStatusLabels: Record<AuthStatusDto['status'], string> = {
@@ -1014,6 +1030,7 @@ const Workspace = ({
   const comments = focusedVersion
     ? state.view.comments.filter((comment) => comment.versionId === focusedVersion.id)
     : [];
+  const isReanchoring = reanchorCommentId !== null && reanchorCommentId === editingCommentId;
 
   const previewSessionId = state.view.sessionId;
   const previewRevision = state.view.revision;
@@ -1117,6 +1134,13 @@ const Workspace = ({
     new Promise((resolve) => {
       enqueue('prepare-prompt', async () => {
         let current = stateRef.current;
+        const existingPrompt = current.prompt;
+        const expectedParent = kind === 'draftGeneration' ? null : current.view.latestVersionId;
+        const existingParent = existingPrompt?.preparation.trace.parent?.versionId ?? null;
+        const priorFactOverrides =
+          existingPrompt?.preparation.purpose === kind && existingParent === expectedParent
+            ? serializeFactOverrides(existingPrompt.factOverrides)
+            : undefined;
         if (kind === 'draftGeneration' && current.minutes.dirty) {
           const view = unwrap(
             await window.newsWriter.projects.saveMinutes({
@@ -1170,6 +1194,7 @@ const Workspace = ({
             ...(kind === 'aiReview' && supplement.trim()
               ? { newSupplementalFacts: supplement.trim() }
               : {}),
+            ...(priorFactOverrides ? { factOverrides: priorFactOverrides as never } : {}),
             ...(Object.keys(taskConfig).length ? { taskConfig } : {}),
           }),
         );
@@ -1180,6 +1205,8 @@ const Workspace = ({
             base: result.messages[0].content,
             dirty: false,
             preparation: result,
+            factOverrides:
+              (result as typeof result & { factOverrides?: FactOverrides }).factOverrides ?? {},
             unlocked: false,
             warningAcknowledged: false,
             stale: false,
@@ -1252,6 +1279,7 @@ const Workspace = ({
           ...(draft.preparation.purpose === 'aiReview' && supplement.trim()
             ? { newSupplementalFacts: supplement.trim() }
             : {}),
+          factOverrides: serializeFactOverrides(draft.factOverrides) as never,
           ...(Object.keys(taskConfig).length ? { taskConfig } : {}),
           messages: [{ role: 'user', content: draft.value }],
           editedByUser: draft.dirty,
@@ -1261,10 +1289,31 @@ const Workspace = ({
           ...(oldFingerprint ? { previousPromptInputFingerprint: oldFingerprint } : {}),
           acknowledgedRiskCodes: draft.preparation.risks.map((risk) => risk.code),
           reviewEnabled,
-        }),
+        } as never),
       );
       hydrate();
     });
+  };
+
+  const updateFactOverride = (
+    field: keyof FactOverrides,
+    mode: FactOverrideMode,
+    value?: string,
+  ): void => {
+    const prompt = stateRef.current.prompt;
+    if (!prompt) return;
+    const nextOverride = mode === 'manual' ? { mode, value: value ?? '' } : { mode };
+    const existing = prompt.factOverrides ?? {};
+    const action = {
+      type: 'setPrompt',
+      prompt: {
+        ...prompt,
+        factOverrides: { ...existing, [field]: nextOverride },
+        stale: true,
+      },
+    } as const;
+    stateRef.current = workspaceReducer(stateRef.current, action);
+    dispatch(action);
   };
 
   const setLatest = (id: string): void => {
@@ -1341,6 +1390,37 @@ const Workspace = ({
       setModal(null);
       setSelection(null);
     });
+  };
+
+  const removeComment = (commentId: string): void => {
+    const current = stateRef.current;
+    const comment = current.view.comments.find((item) => item.id === commentId);
+    if (!comment || comment.versionId !== current.view.latestVersionId) return;
+    requestConfirmation(
+      '删除批注',
+      '确定删除这条批注？删除后它不会再参与后续续改，且无法恢复。',
+      '删除批注',
+      () =>
+        enqueue('delete-comment', async () => {
+          const latest = stateRef.current;
+          const view = unwrap(
+            await window.newsWriter.comments.delete({
+              sessionId: latest.view.sessionId,
+              expectedRevision: latest.view.revision,
+              commentId: comment.id,
+              expectedCommentRevision: comment.revision,
+            }),
+          );
+          dispatch({ type: 'replaceView', view, markPromptStale: true });
+          if (editingCommentId === comment.id) {
+            setEditingCommentId(null);
+            setReanchorCommentId(null);
+            setCommentBody('');
+            setModal(null);
+          }
+        }),
+      true,
+    );
   };
 
   const archive = (): void => {
@@ -1840,7 +1920,16 @@ const Workspace = ({
                           setModal('comment');
                         }}
                       >
-                        重新锚定
+                        重新标定
+                      </button>
+                    )}
+                    {focusedVersion?.id === state.view.latestVersionId && (
+                      <button
+                        className="inline-command danger"
+                        title="删除这条批注，不再参与后续续改"
+                        onClick={() => removeComment(comment.id)}
+                      >
+                        删除批注
                       </button>
                     )}
                   </li>
@@ -1957,13 +2046,66 @@ const Workspace = ({
                   ['地点', state.prompt.preparation.factCheck.location],
                   ['举办单位', state.prompt.preparation.factCheck.organizer],
                 ] as const
-              ).map(([label, item]) => (
-                <li key={label}>
-                  <span>{label}</span>
-                  <strong>{item.status === 'present' ? '已识别' : '缺失'}</strong>
-                  {'evidence' in item && item.evidence ? <small>{item.evidence}</small> : null}
-                </li>
-              ))}
+              ).map(([label, item]) =>
+                (() => {
+                  const field = (
+                    { 日期: 'date', 时间: 'time', 地点: 'location', 举办单位: 'organizer' } as const
+                  )[label];
+                  const override = state.prompt?.factOverrides?.[field] ?? {
+                    mode: 'auto' as const,
+                  };
+                  const manualValue = override.mode === 'manual' ? (override.value ?? '') : '';
+                  return (
+                    <li key={label} className="fact-check-item">
+                      <div className="fact-check-heading">
+                        <span>{label}</span>
+                        <strong>
+                          {override.mode === 'none'
+                            ? '确认没有'
+                            : override.mode === 'manual'
+                              ? manualValue.trim()
+                                ? '手动值'
+                                : '待填写'
+                              : item.status === 'present'
+                                ? '已识别'
+                                : '缺失'}
+                        </strong>
+                      </div>
+                      <div className="fact-check-controls">
+                        <select
+                          aria-label={`${label}事实来源`}
+                          value={override.mode}
+                          onChange={(event) =>
+                            updateFactOverride(field, event.target.value as FactOverrideMode)
+                          }
+                        >
+                          <option value="auto">自动识别</option>
+                          <option value="manual">手动值</option>
+                          <option value="none">确认没有</option>
+                        </select>
+                        {override.mode === 'manual' && (
+                          <textarea
+                            aria-label={`${label}手动值`}
+                            value={manualValue}
+                            onChange={(event) =>
+                              updateFactOverride(field, 'manual', event.target.value)
+                            }
+                            placeholder={`填写${label}`}
+                            rows={2}
+                          />
+                        )}
+                      </div>
+                      {override.mode === 'auto' && 'evidence' in item && item.evidence ? (
+                        <small>{item.evidence}</small>
+                      ) : override.mode === 'manual' ? (
+                        <small>{manualValue.trim() ? `用户确认：${manualValue}` : '等待用户填写'}</small>
+                      ) : override.mode === 'none' ? (
+                        <small>用户确认未提供</small>
+                      ) : null}
+                    </li>
+                  );
+                })(),
+              )}
             </ul>
             {state.prompt.preparation.factCheck.blocking && (
               <button
@@ -2077,7 +2219,13 @@ const Workspace = ({
       )}
       {modal === 'comment' && (
         <Modal
-          title={editingCommentId ? '编辑批注' : '添加批注'}
+          title={
+            isReanchoring
+              ? '重新标定批注'
+              : editingCommentId
+                ? '编辑批注'
+                : '添加批注'
+          }
           onClose={() => {
             setModal(null);
             setEditingCommentId(null);
@@ -2086,17 +2234,21 @@ const Workspace = ({
           }}
         >
           <div className="form-stack">
+              {isReanchoring && (
+              <p>仅替换批注引用的位置，批注正文保持不变。</p>
+            )}
             <blockquote>
-              {reanchorCommentId === editingCommentId
+              {isReanchoring
                 ? selection?.exact
                 : editingCommentId
                   ? state.view.comments.find((item) => item.id === editingCommentId)?.quotedText
                   : selection?.exact}
             </blockquote>
             <label>
-              修订意见
+              批注正文
               <textarea
                 autoFocus
+                readOnly={isReanchoring}
                 value={commentBody}
                 onChange={(event) => setCommentBody(event.target.value)}
               />
@@ -2117,7 +2269,7 @@ const Workspace = ({
                 disabled={!commentBody.trim()}
                 onClick={editingCommentId ? editComment : addComment}
               >
-                保存批注
+                {isReanchoring ? '确认重新标定' : '保存批注'}
               </button>
             </div>
           </div>

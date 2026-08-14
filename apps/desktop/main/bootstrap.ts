@@ -207,6 +207,8 @@ export const startDesktop = (workerRunner: WorkerRunner): void => {
         await projectService!.addComment(input as never, ownerId),
       [IPC_CHANNELS.commentsEdit]: async (input, ownerId) =>
         await projectService!.editComment(input as never, ownerId),
+      [IPC_CHANNELS.commentsDelete]: async (input, ownerId) =>
+        await projectService!.deleteComment(input as never, ownerId),
       [IPC_CHANNELS.retrievalSearch]: async (input, ownerId) =>
         await projectService!.searchRetrieval(input as never, ownerId),
       [IPC_CHANNELS.tasksStart]: async (input, ownerId) => {

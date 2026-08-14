@@ -20,6 +20,7 @@ import {
   commentRecordSchema,
   commitSuccessfulVersion,
   createProject,
+  deleteComment,
   editComment,
   getBranches,
   getCurrentVersionChain,
@@ -548,6 +549,94 @@ describe('domain workflow', () => {
     expect(queued.tasks.at(-1)?.supplementalFacts).toBe('经用户确认的合成补充事实');
   });
 
+  it('persists structured fact overrides with queued tasks', () => {
+    const { project, ids, clock } = setupProject();
+    const promptText = 'draft with confirmed facts';
+    const promptRef = ref(
+      'content/prompts/facts/0.txt',
+      promptText,
+      contentHash(promptText),
+      'text/plain',
+    );
+    const queued = queueTask(
+      project,
+      {
+        kind: 'draftGeneration',
+        messages: [{ role: 'user', contentRef: promptRef }],
+        editedByUser: false,
+        upstream: {
+          promptInputFingerprint: contentHash(promptText),
+          currentInputFingerprint: contentHash(promptText),
+          staleResolution: 'current',
+        },
+        config: { defaults },
+        factOverrides: {
+          date: { mode: 'manual', value: '2026年8月' },
+          location: { mode: 'none' },
+        },
+      },
+      project.revision,
+      { ids, clock, runtime },
+    );
+    expect(queued.tasks.at(-1)?.factOverrides).toEqual({
+      date: { mode: 'manual', value: '2026年8月' },
+      location: { mode: 'none' },
+    });
+  });
+
+  it('copies fact overrides into the immutable successful version snapshot', () => {
+    const { project, ids, clock } = setupProject();
+    const contents = new Map<string, string>();
+    const promptText = 'draft with facts';
+    const promptRef = ref('content/prompts/facts-version/0.txt', promptText, contentHash(promptText), 'text/plain');
+    contents.set(promptRef.relativePath, promptText);
+    let queued = queueTask(
+      project,
+      {
+        kind: 'draftGeneration',
+        messages: [{ role: 'user', contentRef: promptRef }],
+        editedByUser: false,
+        upstream: {
+          promptInputFingerprint: contentHash(promptText),
+          currentInputFingerprint: contentHash(promptText),
+          staleResolution: 'current',
+        },
+        config: { defaults },
+        factOverrides: { date: { mode: 'manual', value: '2026年8月' } },
+      },
+      project.revision,
+      { ids, clock, runtime },
+    );
+    const task = queued.tasks.at(-1)!;
+    for (const status of ['preparing', 'requesting', 'processing'] as const)
+      queued = transitionTask(queued, task.id, { status }, queued.revision, clock.now(), runtime);
+    queued = transitionTask(
+      queued,
+      task.id,
+      {
+        status: 'saving',
+        successTransactionId: uuid(700),
+        proposedVersionId: parseVersionId(uuid(701)),
+        targetRevision: queued.revision + 2,
+      },
+      queued.revision,
+      clock.now(),
+      runtime,
+    );
+    const versionText = '标题\n\n正文。';
+    const versionRef = ref('content/versions/facts-version.md', versionText, contentHash(versionText));
+    const completed = commitSuccessfulVersion(
+      queued,
+      { taskId: task.id, contentRef: versionRef, createdAt: clock.now() },
+      queued.revision,
+      { readText: (candidate) => (candidate.relativePath === versionRef.relativePath ? versionText : contents.get(candidate.relativePath)) },
+      runtime,
+    );
+    expect(completed.versions.at(-1)?.factOverrides).toEqual({
+      date: { mode: 'manual', value: '2026年8月' },
+    });
+  });
+
   it('orders mixed-precision comment snapshots and rejects corrupted snapshot metadata', () => {
     const { project, ids, clock, minutesText } = setupProject();
     const contents = new Map([[project.minutes.contentRef.relativePath, minutesText]]);
@@ -667,6 +756,15 @@ describe('domain workflow', () => {
       { readText: (artifact) => contents.get(artifact.relativePath) },
       runtime,
     );
+    const deleted = deleteComment(
+      current,
+      { commentId: current.comments[0]!.id },
+      current.revision,
+      clock.now(),
+      runtime,
+    );
+    expect(deleted.comments).toHaveLength(0);
+    expect(deleted.revision).toBe(current.revision + 1);
     const third = queueAndComplete(current, ids, clock, 'commentRevision', 3, contents);
     expect(second.project.tasks.at(-1)?.commentSnapshot[0]?.body).toBe(snapshotBody);
     expect(third.project.tasks.at(-1)?.commentSnapshot[0]?.body).toBe('按回溯后的意见调整');

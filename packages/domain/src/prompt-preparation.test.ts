@@ -14,13 +14,16 @@ import {
 
 import { DEFAULT_GENERATION_CONFIG } from './config.js';
 import {
+  checkMissingFacts,
   fingerprintCommentSnapshot,
   preparePrompt,
+  resolveFactOverrides,
   type PromptPreparationInput,
 } from './prompt-preparation.js';
 
 const root = path.resolve(import.meta.dirname, '../../..');
-const read = async (relativePath: string) => await readFile(path.join(root, relativePath), 'utf8');
+const read = async (relativePath: string) =>
+  (await readFile(path.join(root, relativePath), 'utf8')).replace(/\r\n?/g, '\n');
 const sha256Utf8 = (text: string): Sha256 =>
   sha256Schema.parse(createHash('sha256').update(text, 'utf8').digest('hex'));
 
@@ -37,6 +40,68 @@ const common = (minutes: string, profile: 'official' | 'other', publisher: strin
 });
 
 describe('Prompt preparation', () => {
+  it('allows user fact overrides without changing the minutes snapshot', () => {
+    const facts = checkMissingFacts({
+      minutes: '活动日期：2099年1月1日\n举办单位：自动识别单位\n',
+      factOverrides: {
+        date: { mode: 'manual', value: '2026年8月' },
+        location: { mode: 'manual', value: '线上会议室' },
+        organizer: { mode: 'none' },
+      },
+    });
+    expect(facts.date).toEqual({ status: 'present', evidence: '2026年8月', source: 'user' });
+    expect(facts.location).toEqual({ status: 'present', evidence: '线上会议室', source: 'user' });
+    expect(facts.organizer).toEqual({ status: 'missing', source: 'user' });
+    expect(facts.time).toEqual({ status: 'missing', source: 'detected' });
+    expect(facts.blocking).toBe(true);
+  });
+
+  it('includes fact override decisions in the prompt text and fingerprint', () => {
+    const minutes = '活动日期：2099年1月1日\n举办单位：测试单位\n';
+    const base: PromptPreparationInput = {
+      ...common(minutes, 'official', '测试单位'),
+      kind: 'draftGeneration' as const,
+      parent: null,
+      comments: [],
+      retrieval: { state: 'unavailable' as const },
+    };
+    const automatic = preparePrompt(base, { sha256Utf8 });
+    const overridden = preparePrompt(
+      { ...base, factOverrides: { location: { mode: 'manual' as const, value: '线上会议室' } } },
+      { sha256Utf8 },
+    );
+    expect(overridden.messages[0]?.content).toContain('# 事实检查提示');
+    expect(overridden.messages[0]?.content).toContain('线上会议室（用户确认）');
+    expect(overridden.messages[0]?.content).not.toContain('# 用户事实检查确认');
+    expect(overridden.messages[0]?.content).toContain('线上会议室');
+    expect(overridden.inputFingerprint).not.toBe(automatic.inputFingerprint);
+  });
+
+  it('inherits fact overrides while allowing an explicit auto reset', () => {
+    expect(
+      resolveFactOverrides(
+        { date: { mode: 'manual', value: '2026年8月' }, location: { mode: 'none' } },
+        { date: { mode: 'auto' } },
+      ),
+    ).toEqual({ date: { mode: 'auto' }, location: { mode: 'none' } });
+  });
+
+  it('treats a manually confirmed missing date as an omitted footer, not placeholder text', () => {
+    const prepared = preparePrompt(
+      {
+        ...common('举办单位：测试单位\n', 'official', '测试单位'),
+        kind: 'draftGeneration',
+        parent: null,
+        comments: [],
+        retrieval: { state: 'unavailable' },
+        factOverrides: { date: { mode: 'none' } },
+      },
+      { sha256Utf8 },
+    );
+    expect(prepared.messages[0]?.content).toContain('省略日期落款');
+    expect(prepared.messages[0]?.content).not.toContain('日期“日期未提供”');
+  });
+
   it('includes an immutable institution snapshot as additive guidance', async () => {
     const minutes = await read('tests/fixtures/minutes/gf-01-official-complete.md');
     const prepared = preparePrompt(

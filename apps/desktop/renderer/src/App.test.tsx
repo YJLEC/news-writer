@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -185,6 +185,7 @@ const api = () => ({
   comments: {
     add: vi.fn<(input: unknown) => Promise<IpcResult<ProjectViewDto>>>(async () => ok(view)),
     edit: vi.fn<(input: unknown) => Promise<IpcResult<ProjectViewDto>>>(async () => ok(view)),
+    delete: vi.fn<(input: unknown) => Promise<IpcResult<ProjectViewDto>>>(async () => ok(view)),
   },
   prompts: {
     prepare: vi.fn(async () =>
@@ -213,10 +214,10 @@ const api = () => ({
           },
         },
         factCheck: {
-          date: { status: 'present' as const, evidence: '今天' },
-          location: { status: 'present' as const, evidence: '报告厅' },
-          organizer: { status: 'present' as const, evidence: '学院' },
-          time: { status: 'present' as const, evidence: '上午' },
+          date: { status: 'present' as const, evidence: '今天', source: 'detected' as const },
+          location: { status: 'present' as const, evidence: '报告厅', source: 'detected' as const },
+          organizer: { status: 'present' as const, evidence: '学院', source: 'detected' as const },
+          time: { status: 'present' as const, evidence: '上午', source: 'detected' as const },
           blocking: false,
         },
         risks: [],
@@ -427,7 +428,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '模拟选择新引用' }));
     fireEvent.click(screen.getByRole('button', { name: '为所选文本添加批注' }));
-    const commentInput = screen.getByLabelText<HTMLTextAreaElement>('修订意见');
+    const commentInput = screen.getByLabelText<HTMLTextAreaElement>('批注正文');
     commentInput.focus();
     fireEvent.change(commentInput, { target: { value: '补' } });
     fireEvent.change(commentInput, { target: { value: '补充' } });
@@ -502,6 +503,34 @@ describe('App', () => {
     expect(factCheck.textContent).toContain('提示用于核对，不代表事实已经得到证明');
   });
 
+  it('allows fact-check items to be confirmed manually or as unavailable and forwards overrides', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /打开项目/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '准备初稿 Prompt' }));
+    const factCheck = await screen.findByRole('region', { name: '事实检查' });
+
+    fireEvent.change(screen.getByLabelText('日期事实来源'), { target: { value: 'manual' } });
+    const dateInput = screen.getByLabelText<HTMLInputElement>('日期手动值');
+    fireEvent.change(dateInput, { target: { value: '2026年8月' } });
+    expect(factCheck.textContent).toContain('手动值');
+    expect(factCheck.textContent).toContain('用户确认：2026年8月');
+    fireEvent.change(screen.getByLabelText('地点事实来源'), { target: { value: 'none' } });
+    expect(factCheck.textContent).toContain('确认没有');
+
+    fireEvent.click(screen.getByRole('button', { name: '准备初稿 Prompt' }));
+    await waitFor(() => expect(bridge.prompts.prepare).toHaveBeenCalledTimes(2));
+    const input = (
+      bridge.prompts.prepare.mock.calls.at(-1) as unknown as [unknown] | undefined
+    )?.[0] as {
+      factOverrides?: {
+        date?: { mode: string; value?: string };
+        location?: { mode: string; value?: string };
+      };
+    };
+    expect(input.factOverrides?.date).toEqual({ mode: 'manual', value: '2026年8月' });
+    expect(input.factOverrides?.location).toEqual({ mode: 'none' });
+  });
+
   it('distinguishes auth states and keeps a safe inline error while clearing the key field', async () => {
     bridge.auth.getStatus.mockResolvedValue(
       ok({ provider: 'deepseek' as const, status: 'unavailable' as const }),
@@ -544,7 +573,7 @@ describe('App', () => {
     fireEvent.click(await screen.findByRole('button', { name: /打开项目/ }));
     fireEvent.click(await screen.findByRole('button', { name: '模拟选择新引用' }));
     fireEvent.click(screen.getByRole('button', { name: '编辑批注' }));
-    fireEvent.change(screen.getByLabelText('修订意见'), { target: { value: '只改正文' } });
+    fireEvent.change(screen.getByLabelText('批注正文'), { target: { value: '只改正文' } });
     fireEvent.click(screen.getByRole('button', { name: '保存批注' }));
     await waitFor(() => expect(bridge.comments.edit).toHaveBeenCalledTimes(1));
     expect(bridge.comments.edit.mock.calls[0]?.[0]).toMatchObject({
@@ -554,12 +583,31 @@ describe('App', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: '模拟选择新引用' }));
-    fireEvent.click(screen.getByRole('button', { name: '重新锚定' }));
-    fireEvent.click(screen.getByRole('button', { name: '保存批注' }));
+    fireEvent.click(screen.getByRole('button', { name: '重新标定' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认重新标定' }));
     await waitFor(() => expect(bridge.comments.edit).toHaveBeenCalledTimes(2));
     expect(bridge.comments.edit.mock.calls[1]?.[0]).toMatchObject({
       anchor: { exact: '新引用', start: 4, end: 7 },
       quotedText: '新引用',
+    });
+  });
+
+  it('deletes a misplaced latest-version comment after confirmation', async () => {
+    bridge.projects.openWithDialog.mockResolvedValue(
+      ok({ cancelled: false as const, data: commentedView }),
+    );
+    bridge.comments.delete.mockResolvedValue(ok({ ...commentedView, comments: [] }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /打开项目/ }));
+    await screen.findByRole('heading', { name: '批注' });
+    fireEvent.click(screen.getByRole('button', { name: '删除批注' }));
+    const confirmation = await screen.findByRole('dialog', { name: '删除批注' });
+    expect(confirmation).toBeDefined();
+    fireEvent.click(within(confirmation).getByRole('button', { name: '删除批注' }));
+    await waitFor(() => expect(bridge.comments.delete).toHaveBeenCalledTimes(1));
+    expect(bridge.comments.delete.mock.calls[0]?.[0]).toMatchObject({
+      commentId: '10000000-0000-4000-8000-000000000012',
+      expectedCommentRevision: 0,
     });
   });
 });

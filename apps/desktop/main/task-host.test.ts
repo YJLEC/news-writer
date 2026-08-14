@@ -389,6 +389,55 @@ describe('TaskHostService', () => {
     await projects.closeAll();
   });
 
+  it('transports manual fact overrides into the worker and successful version snapshot', async () => {
+    const runner = new ImmediateRunner({
+      id: 'fact-override-response',
+      model: 'deepseek-v4-pro',
+      content: '合成活动顺利举行\n活动信息经核验后形成新闻稿。',
+      finishReason: 'stop',
+    });
+    const { projects, tasks, view } = await setup(runner);
+    const factOverrides = {
+      date: { mode: 'manual' as const, value: '2026年8月' },
+      location: { mode: 'manual' as const, value: '线上会议室' },
+      organizer: { mode: 'none' as const },
+    };
+    const prepareInput = {
+      sessionId: view.sessionId,
+      expectedRevision: view.revision,
+      kind: 'draftGeneration' as const,
+      parentVersionId: null,
+      factOverrides,
+    };
+    const prepared = await projects.preparePrompt(prepareInput, 20);
+    expect(prepared.messages[0]?.content).toContain('2026年8月');
+    expect(prepared.messages[0]?.content).toContain('线上会议室');
+    expect(prepared.messages[0]?.content).toContain('用户确认未提供');
+    const terminal = terminalBarrier(tasks);
+    const queued = await tasks.start(
+      {
+        ...prepareInput,
+        messages: [{ ...prepared.messages[0] }],
+        editedByUser: false,
+        editWarningAcknowledged: false,
+        promptInputFingerprint: prepared.inputFingerprint,
+        staleResolution: 'current',
+        acknowledgedRiskCodes: prepared.risks.map((risk) => risk.code),
+      },
+      20,
+    );
+    await expect(terminal).resolves.toBe('succeeded');
+    expect(runner.lastInput?.messages[0]?.content).toContain('2026年8月');
+    expect(runner.lastInput?.messages[0]?.content).toContain('线上会议室');
+    const aggregate = projects.getOwned(view.sessionId, 20).aggregate;
+    expect(aggregate.tasks.find((task) => task.id === queued.id)?.factOverrides).toEqual(
+      factOverrides,
+    );
+    expect(aggregate.versions[0]?.factOverrides).toEqual(factOverrides);
+    await tasks.shutdownAll();
+    await projects.closeAll();
+  });
+
   it.each(['continued', 'regenerated'] as const)(
     'accepts a valid %s stale decision and snapshots the authoritative fingerprints',
     async (decision) => {
@@ -803,6 +852,9 @@ describe('TaskHostService', () => {
       kind: 'draftGeneration' | 'aiReview',
       parentVersionId: ReturnType<typeof versionIdSchema.parse> | null,
       newSupplementalFacts?: string,
+      factOverrides?: {
+        location?: { mode: 'auto' } | { mode: 'manual'; value: string } | { mode: 'none' };
+      },
     ) => {
       const revision = projects.getOwned(view.sessionId, 20).aggregate.revision;
       const prepareInput = {
@@ -811,6 +863,7 @@ describe('TaskHostService', () => {
         kind,
         parentVersionId,
         ...(newSupplementalFacts === undefined ? {} : { newSupplementalFacts }),
+        ...(factOverrides === undefined ? {} : { factOverrides }),
       };
       const prepared = await projects.preparePrompt(prepareInput, 20);
       const terminal = terminalBarrier(tasks);
@@ -830,7 +883,12 @@ describe('TaskHostService', () => {
       return projects.getOwned(view.sessionId, 20).aggregate.latestVersionId!;
     };
     const rootVersion = await runCurrent('draftGeneration', null);
-    const branchA = await runCurrent('aiReview', rootVersion, '活动地点：A分支会场');
+    const branchA = await runCurrent(
+      'aiReview',
+      rootVersion,
+      '活动地点：A分支会场',
+      { location: { mode: 'manual', value: 'A分支会场' } },
+    );
     let aggregate = projects.getOwned(view.sessionId, 20).aggregate;
     await projects.setLatestVersion(
       {
@@ -862,6 +920,18 @@ describe('TaskHostService', () => {
     );
     expect(preparedFromA.messages[0].content).toContain('A分支会场');
     expect(preparedFromA.messages[0].content).not.toContain('B分支会场');
+    const clearedFromA = await projects.preparePrompt(
+      {
+        sessionId: view.sessionId,
+        expectedRevision: aggregate.revision,
+        kind: 'aiReview',
+        parentVersionId: branchA,
+        factOverrides: { location: { mode: 'auto' } },
+      },
+      20,
+    );
+    expect(clearedFromA.factOverrides?.location).toEqual({ mode: 'auto' });
+    expect(clearedFromA.messages[0].content).toContain('继续自动识别');
     expect(branchB).not.toBe(branchA);
     await projects.setLatestVersion(
       {

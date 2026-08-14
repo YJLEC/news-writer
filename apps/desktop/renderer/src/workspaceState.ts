@@ -13,12 +13,29 @@ export interface DraftState {
   dirty: boolean;
 }
 
+export type FactOverrideMode = 'auto' | 'manual' | 'none';
+export type FactOverride = { mode: FactOverrideMode; value?: string };
+export type FactOverrides = {
+  date?: FactOverride;
+  time?: FactOverride;
+  location?: FactOverride;
+  organizer?: FactOverride;
+};
+
 export interface PromptDraft extends DraftState {
   preparation: PromptPreparationDto;
+  factOverrides: FactOverrides;
   unlocked: boolean;
   warningAcknowledged: boolean;
   stale: boolean;
 }
+
+export const defaultFactOverrides = (): FactOverrides => ({
+  date: { mode: 'auto' },
+  time: { mode: 'auto' },
+  location: { mode: 'auto' },
+  organizer: { mode: 'auto' },
+});
 
 export interface UiError {
   code: string;

@@ -22,6 +22,34 @@ import { z } from 'zod';
 export const projectProfileSchema = z.enum(['official', 'other']);
 export const projectStatusSchema = z.enum(['active', 'archived']);
 export const taskKindSchema = z.enum(['draftGeneration', 'aiReview', 'commentRevision']);
+
+/**
+ * User decisions for the structured fact check. Omitted fields remain in
+ * automatic detection mode; `none` explicitly confirms that a fact is not
+ * available, while `manual` supplies the value used for prompt preparation.
+ */
+export const factOverrideItemSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('auto') }).strict(),
+  z
+    .object({
+      mode: z.literal('manual'),
+      value: z.string().trim().min(1).max(1_000),
+    })
+    .strict(),
+  z.object({ mode: z.literal('none') }).strict(),
+]);
+
+export const factOverridesSchema = z
+  .object({
+    date: factOverrideItemSchema.optional(),
+    location: factOverrideItemSchema.optional(),
+    organizer: factOverrideItemSchema.optional(),
+    time: factOverrideItemSchema.optional(),
+  })
+  .strict();
+
+export type FactOverrideItem = z.infer<typeof factOverrideItemSchema>;
+export type FactOverrides = z.infer<typeof factOverridesSchema>;
 export const taskStatusSchema = z.enum([
   'queued',
   'preparing',
@@ -200,6 +228,7 @@ export const queueTaskInputSchema = z
       })
       .strict(),
     profileSnapshot: writingProfileSnapshotSchema.optional(),
+    factOverrides: factOverridesSchema.optional(),
     supplementalFacts: z.string().trim().min(1).max(100_000).optional(),
     retrievalReportId: retrievalReportIdSchema.optional(),
     retrievalUnavailable: z.boolean().optional(),
@@ -229,6 +258,7 @@ export const versionRecordSchema = z
     taskStatusSnapshot: z.literal('succeeded'),
     configSnapshot: resolvedGenerationConfigSnapshotSchema,
     profileSnapshot: writingProfileSnapshotSchema.optional(),
+    factOverrides: factOverridesSchema.optional(),
     contentRef: textArtifactRefSchema.refine((ref) => ref.byteLength > 0, {
       message: 'Successful version content must not be empty',
     }),
@@ -296,6 +326,7 @@ const taskBaseFields = {
   configSnapshot: resolvedGenerationConfigSnapshotSchema,
   profileSnapshot: writingProfileSnapshotSchema.optional(),
   minutesSnapshot: minutesSnapshotSchema,
+  factOverrides: factOverridesSchema.optional(),
   supplementalFacts: z.string().trim().min(1).max(100_000).optional(),
   reviewEnabled: z.boolean().optional(),
   retrievalReportId: retrievalReportIdSchema.optional(),

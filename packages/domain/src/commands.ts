@@ -356,6 +356,31 @@ export const editComment = (
   return withRevision(project, at, runtime, { comments });
 };
 
+export interface DeleteCommentInput {
+  commentId: CommentRecord['id'];
+}
+
+export const deleteComment = (
+  project: ProjectAggregateV1,
+  input: DeleteCommentInput,
+  expectedRevision: number,
+  at: Timestamp,
+  runtime: RuntimeVersionSnapshot,
+): ProjectAggregateV1 => {
+  assertRevision(project, expectedRevision);
+  assertActive(project);
+  const current = project.comments.find((comment) => comment.id === input.commentId);
+  if (current === undefined) {
+    throw new DomainRuleError('ENTITY_NOT_FOUND', 'Comment does not exist');
+  }
+  if (project.latestVersionId !== current.versionId) {
+    throw new DomainRuleError('COMMENT_NOT_EDITABLE', 'Only latest-version comments are editable');
+  }
+  return withRevision(project, at, runtime, {
+    comments: project.comments.filter((comment) => comment.id !== input.commentId),
+  });
+};
+
 export const queueTask = (
   project: ProjectAggregateV1,
   input: QueueTaskInput,
@@ -436,6 +461,9 @@ export const queueTask = (
       ? {}
       : { profileSnapshot: parsedInput.profileSnapshot }),
     minutesSnapshot: structuredClone(project.minutes),
+    ...(parsedInput.factOverrides === undefined
+      ? {}
+      : { factOverrides: structuredClone(parsedInput.factOverrides) }),
     ...(parsedInput.supplementalFacts === undefined
       ? {}
       : { supplementalFacts: parsedInput.supplementalFacts }),
@@ -548,6 +576,7 @@ export const commitSuccessfulVersion = (
     taskStatusSnapshot: 'succeeded',
     configSnapshot: task.configSnapshot,
     ...(task.profileSnapshot === undefined ? {} : { profileSnapshot: task.profileSnapshot }),
+    ...(task.factOverrides === undefined ? {} : { factOverrides: structuredClone(task.factOverrides) }),
     contentRef: input.contentRef,
   });
   const succeeded = taskRecordSchema.parse({

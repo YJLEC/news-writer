@@ -48,6 +48,7 @@ const api: NewsWriterApiV1 = {
   comments: Object.freeze({
     add: async (input) => await invoke(IPC_CHANNELS.commentsAdd, input),
     edit: async (input) => await invoke(IPC_CHANNELS.commentsEdit, input),
+    delete: async (input) => await invoke(IPC_CHANNELS.commentsDelete, input),
   }),
   prompts: Object.freeze({
     prepare: async (input) => await invoke(IPC_CHANNELS.promptsPrepare, input),

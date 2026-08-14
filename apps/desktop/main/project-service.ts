@@ -4,6 +4,7 @@ import {
   addComment,
   archiveProject,
   createProject,
+  deleteComment,
   editComment,
   checkMissingFacts,
   recordExport,
@@ -12,6 +13,7 @@ import {
   orderCommentSnapshots,
   preparePrompt as buildPrompt,
   resolveBranchFacts,
+  resolveFactOverrides,
   resolveGenerationConfig,
   DEFAULT_GENERATION_CONFIG,
   restoreProject,
@@ -73,6 +75,7 @@ import {
   sessionIdSchema,
   type AddCommentDto,
   type CreateProjectDto,
+  type DeleteCommentDto,
   type EditCommentDto,
   type ExportDocumentDto,
   type ExportDocumentResultDto,
@@ -747,6 +750,7 @@ export class ProjectService {
     const parentContent =
       parent === undefined ? undefined : owned.project.readText(parent.contentRef);
     const branchFacts = resolveBranchFacts(project, input.parentVersionId);
+    const factOverrides = resolveFactOverrides(branchFacts.factOverrides, input.factOverrides);
     const user = await this.#userConfig.get();
     const comments =
       input.kind === 'commentRevision'
@@ -818,6 +822,7 @@ export class ProjectService {
         ...(input.newSupplementalFacts === undefined
           ? {}
           : { newSupplementalFacts: input.newSupplementalFacts }),
+        ...(factOverrides === undefined ? {} : { factOverrides }),
         ...(retrieval === undefined ? {} : { retrieval }),
         comments,
         config: {
@@ -947,6 +952,24 @@ export class ProjectService {
           input.expectedRevision,
           systemClock.now(),
           { readText: (ref) => owned.project.readText(ref) },
+          this.#runtime,
+        ),
+      };
+    });
+  }
+
+  async deleteComment(input: DeleteCommentDto, ownerId: number): Promise<ProjectViewDto> {
+    return await this.#mutate(input, ownerId, (_owned, current) => {
+      const comment = current.comments.find((candidate) => candidate.id === input.commentId);
+      if (comment === undefined) throw new SafeMainError(this.#notFound());
+      if (comment.revision !== input.expectedCommentRevision)
+        throw new SafeMainError(this.#conflict());
+      return {
+        next: deleteComment(
+          current,
+          { commentId: commentIdSchema.parse(input.commentId) },
+          input.expectedRevision,
+          systemClock.now(),
           this.#runtime,
         ),
       };
@@ -1227,6 +1250,7 @@ export class ProjectService {
         createdBy: version.createdBy,
         taskId: version.taskId,
         contentSha256: version.contentRef.sha256,
+        ...(version.factOverrides === undefined ? {} : { factOverrides: version.factOverrides }),
         content: owned.project.readText(version.contentRef),
       })),
       comments: project.comments,
@@ -1251,6 +1275,7 @@ export class ProjectService {
         promptId: task.promptId,
         history: task.history,
         configSnapshot: task.configSnapshot,
+        ...(task.factOverrides === undefined ? {} : { factOverrides: task.factOverrides }),
         minutes: {
           revisionId: task.minutesSnapshot.revisionId,
           sha256: task.minutesSnapshot.contentRef.sha256,

@@ -77,6 +77,15 @@ const buildSyntheticBundle = async () => {
 };
 
 describe('retrieval normalization and tokenizer', () => {
+  it('keeps source extraction and approved bundle compilation out of the runtime entry', async () => {
+    const runtimeEntry = await import('./index.js');
+    const developmentEntry = await import('./development.js');
+    expect('buildApprovedKnowledgeBundleV1' in runtimeEntry).toBe(false);
+    expect('extractKnowledgeCandidatesV1' in runtimeEntry).toBe(false);
+    expect(typeof developmentEntry.buildApprovedKnowledgeBundleV1).toBe('function');
+    expect(typeof developmentEntry.extractKnowledgeCandidatesV1).toBe('function');
+  });
+
   it('matches GF-13 and remains idempotent', async () => {
     const input = await readFile(
       path.join(repositoryRoot, 'tests', 'fixtures', 'text', 'gf-13-normalization.input.txt'),

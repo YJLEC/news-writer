@@ -65,7 +65,22 @@ const trace = {
   supplement: { present: false, sha256: hash },
   retrieval: { state: 'unavailable' },
   comments: { count: 0, sha256: hash },
-  writingRulesVersion: 'prompt-contract-v1',
+  writingRulesVersion: 'writing-v1',
+  profileSnapshot: {
+    profileId: 'profile_synthetic-public',
+    profileVersion: 'v1',
+    writingRulesVersion: 'writing-v1',
+    promptContractVersion: 'prompt-contract-v1',
+    documentStyleVersion: 'document-style-v1',
+    knowledgeVersion: 'kw_synthetic_v1',
+    resourceHash: hash,
+    rules: ['Use only supplied facts.'],
+    promptSections: {
+      initialDraft: 'Prepare an initial draft.',
+      secondReview: 'Review the draft.',
+      commentRevision: 'Apply comments to the draft.',
+    },
+  },
 } as const;
 const project = {
   sessionId: ids.session,
@@ -193,6 +208,11 @@ const requests: Record<string, unknown> = {
     quotedText: '稿',
     body: '修改',
   },
+  [IPC_CHANNELS.commentsDelete]: {
+    ...session,
+    commentId: ids.comment,
+    expectedCommentRevision: 0,
+  },
   [IPC_CHANNELS.retrievalSearch]: { ...session, query: '活动', topK: 5 },
   [IPC_CHANNELS.tasksStart]: {
     ...session,
@@ -255,10 +275,10 @@ const data: Record<string, unknown> = {
     inputFingerprint: hash,
     resolvedConfig,
     factCheck: {
-      date: { status: 'present', evidence: '2099年1月1日' },
-      location: { status: 'missing' },
-      organizer: { status: 'missing' },
-      time: { status: 'missing' },
+      date: { status: 'present', evidence: '2099年1月1日', source: 'detected' },
+      location: { status: 'missing', source: 'detected' },
+      organizer: { status: 'missing', source: 'detected' },
+      time: { status: 'missing', source: 'detected' },
       blocking: true,
     },
     risks: [{ code: 'MISSING_FACTS', severity: 'blocking', message: '缺少事实' }],
@@ -269,6 +289,7 @@ const data: Record<string, unknown> = {
   [IPC_CHANNELS.settingsPreviewConfig]: resolvedConfig,
   [IPC_CHANNELS.commentsAdd]: project,
   [IPC_CHANNELS.commentsEdit]: project,
+  [IPC_CHANNELS.commentsDelete]: project,
   [IPC_CHANNELS.retrievalSearch]: {
     reportId: ids.retrieval,
     knowledgeVersion: 'synthetic-v1',
@@ -301,7 +322,7 @@ describe('IPC contracts', () => {
   it('has a unique, fixed channel for every invoke and event', () => {
     const names = Object.values(IPC_CHANNELS);
     expect(new Set(names).size).toBe(names.length);
-    expect(Object.keys(IPC_INVOKE_CONTRACTS)).toHaveLength(26);
+    expect(Object.keys(IPC_INVOKE_CONTRACTS)).toHaveLength(27);
     expect(Object.keys(IPC_EVENT_CONTRACTS)).toEqual([IPC_CHANNELS.tasksStatusEvent]);
     expect(names.every((name) => name.startsWith('nw:v1:'))).toBe(true);
   });
@@ -443,6 +464,55 @@ describe('IPC contracts', () => {
         ...(requests[IPC_CHANNELS.commentsAdd] as Record<string, unknown>),
         body: 'x'.repeat(20_001),
       }).success,
+    ).toBe(false);
+  });
+
+  it('accepts structured fact overrides and rejects malformed decisions', () => {
+    const request = requests[IPC_CHANNELS.promptsPrepare] as Record<string, unknown>;
+    expect(
+      IPC_INVOKE_CONTRACTS[IPC_CHANNELS.promptsPrepare].request.safeParse({
+        ...request,
+        factOverrides: {
+          date: { mode: 'manual', value: '2026年8月' },
+          location: { mode: 'none' },
+          organizer: { mode: 'auto' },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      IPC_INVOKE_CONTRACTS[IPC_CHANNELS.promptsPrepare].request.safeParse({
+        ...request,
+        factOverrides: { date: { mode: 'none', value: '不应有值' } },
+      }).success,
+    ).toBe(false);
+    expect(
+      IPC_INVOKE_CONTRACTS[IPC_CHANNELS.promptsPrepare].request.safeParse({
+        ...request,
+        factOverrides: { date: { mode: 'manual', value: '   ' } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts production profile snapshots and keeps their nested fields strict', () => {
+    const result = data[IPC_CHANNELS.promptsPrepare] as Record<string, unknown>;
+    expect(promptPreparationDtoSchema.safeParse(result).success).toBe(true);
+    const traceWithInvalidHash = {
+      ...(result.trace as Record<string, unknown>),
+      profileSnapshot: {
+        ...(result.trace as { profileSnapshot: Record<string, unknown> }).profileSnapshot,
+        resourceHash: 'not-a-sha256',
+      },
+    };
+    expect(
+      promptPreparationDtoSchema.safeParse({ ...result, trace: traceWithInvalidHash }).success,
+    ).toBe(false);
+    expect(
+      promptPreparationDtoSchema
+        .safeParse({
+          ...result,
+          trace: { ...(result.trace as Record<string, unknown>), writingRulesVersion: '' },
+        })
+        .success,
     ).toBe(false);
   });
 

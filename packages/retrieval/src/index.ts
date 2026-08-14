@@ -2,7 +2,6 @@ export * from './build.js';
 export * from './bundle.js';
 export * from './canonical.js';
 export * from './constants.js';
-export * from './compile-approved.js';
 export * from './corpus.js';
 export * from './hash.js';
 export * from './loader.js';

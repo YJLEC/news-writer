@@ -669,6 +669,64 @@ blockquote {
   top: 7px;
   right: 10px;
 }
+.fact-check {
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  font-size: 12px;
+}
+.fact-check > span {
+  color: var(--muted);
+  margin-left: 8px;
+}
+.fact-check ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.fact-check-item {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 5px 8px;
+  align-items: center;
+}
+.fact-check-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+.fact-check-controls {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.fact-check-controls select,
+.fact-check-controls input,
+.fact-check-controls textarea {
+  min-height: 26px;
+  min-width: 0;
+}
+.fact-check-controls select {
+  flex: 0 0 92px;
+  width: 92px;
+}
+.fact-check-controls input,
+.fact-check-controls textarea {
+  flex: 1 1 auto;
+  width: auto;
+}
+.fact-check-controls textarea {
+  min-height: 52px;
+  resize: vertical;
+}
+.fact-check-item small {
+  grid-column: 2;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
 .settings-panel {
   margin-top: 8px;
   border-top: 1px solid var(--line);

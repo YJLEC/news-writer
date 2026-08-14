@@ -13,10 +13,12 @@ import {
 } from '@news-writer/ai';
 import {
   DEFAULT_GENERATION_CONFIG,
+  checkMissingFacts,
   commitSuccessfulVersion,
   fingerprintCommentSnapshot,
   queueTask,
   resolveBranchFacts,
+  resolveFactOverrides,
   resolveSupplementalFacts,
   transitionTask,
   validateNewsContent,
@@ -147,6 +149,7 @@ export class TaskHostService {
         ...(input.newSupplementalFacts === undefined
           ? {}
           : { newSupplementalFacts: input.newSupplementalFacts }),
+        ...(input.factOverrides === undefined ? {} : { factOverrides: input.factOverrides }),
         ...(input.taskConfig === undefined ? {} : { taskConfig: input.taskConfig }),
       },
       ownerId,
@@ -222,6 +225,7 @@ export class TaskHostService {
     });
     const userConfig = await this.#projects.readUserConfigWithinGate();
     const branchFacts = resolveBranchFacts(owned.aggregate, input.parentVersionId);
+    const factOverrides = resolveFactOverrides(branchFacts.factOverrides, input.factOverrides);
     const supplementalFacts =
       input.kind === 'draftGeneration'
         ? undefined
@@ -244,6 +248,7 @@ export class TaskHostService {
           ...(input.taskConfig === undefined ? {} : { task: input.taskConfig }),
         },
         ...(supplementalFacts === undefined ? {} : { supplementalFacts }),
+        ...(factOverrides === undefined ? {} : { factOverrides }),
         ...(prepared.trace.retrieval.state === 'used' ||
         prepared.trace.retrieval.state === 'zeroHits'
           ? { retrievalReportId: prepared.trace.retrieval.reportId }
@@ -606,12 +611,47 @@ export class TaskHostService {
     const task = current.tasks.find((candidate) => candidate.id === taskId);
     if (task?.status !== 'reviewing') return;
     const minutes = project.readText(task.minutesSnapshot.contentRef);
+    const factOverrides = task.factOverrides;
+    const escapePromptMaterial = (value: string): string =>
+      value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    const overrideLines = factOverrides
+      ? Object.entries(factOverrides).flatMap(([field, value]) => {
+          const labels: Record<string, string> = {
+            date: '日期',
+            time: '时间',
+            location: '地点',
+            organizer: '举办/组织主体',
+          };
+          if (value === undefined) return [];
+          return [
+            value.mode === 'manual'
+              ? `- ${labels[field] ?? field}：用户确认值“${escapePromptMaterial(value.value)}”`
+              : value.mode === 'none'
+                ? `- ${labels[field] ?? field}：用户确认未提供`
+                : `- ${labels[field] ?? field}：继续自动识别`,
+          ];
+        })
+      : [];
+    const hasFactOverrides = factOverrides !== undefined && Object.keys(factOverrides).length > 0;
+    const reviewFacts = checkMissingFacts({
+      minutes,
+      ...(supplement.trim() ? { supplementalFacts: supplement } : {}),
+      ...(factOverrides === undefined ? {} : { factOverrides }),
+    });
+    const factBoundary = hasFactOverrides
+      ? '活动纪要、用户确认的补充信息和用户事实检查确认共同构成本轮事实来源；标记为“用户确认”的手动值必须按原文使用；“用户确认未提供”表示不得补写该字段；自动识别结果仍须以活动纪要为准。'
+      : '';
+    const dateOutput = hasFactOverrides
+      ? reviewFacts.date.evidence === undefined
+        ? '如事实来源未提供日期，省略日期落款，不输出“日期未提供”等占位文字。'
+        : `正文后输出日期“${escapePromptMaterial(reviewFacts.date.evidence)}”。`
+      : '';
     const reviewPrompt = [
       '# 任务',
       '校核并修订下面的新闻稿初稿。',
       '',
       '# 审稿规范',
-      '检查事实边界、标题、语言、中文标点和新闻稿结构。活动纪要及用户确认的补充信息是唯一事实来源。删除无法由来源支持的细节。只输出完整新闻稿，不输出审稿意见或修改说明。',
+      `检查事实边界、标题、语言、中文标点和新闻稿结构。${factBoundary || '活动纪要及用户确认的补充信息是唯一事实来源。'} 删除无法由来源支持的细节。只输出完整新闻稿，不输出审稿意见或修改说明。`,
       '',
       '# 活动纪要',
       '<minutes>',
@@ -623,13 +663,16 @@ export class TaskHostService {
       supplement.trim() || '本次无补充信息。',
       '</supplement>',
       '',
+      '# 用户事实检查确认',
+      ...(overrideLines.length > 0 ? overrideLines : ['本次未修改自动事实检查结果。']),
+      '',
       '# 待审新闻稿',
       '<draft>',
       firstResult.content.trimEnd(),
       '</draft>',
       '',
       '# 输出要求',
-      '第一非空行只写标题，随后输出正文、落款主体和日期；不得输出解释、分析、问题清单或内部处理过程。',
+      `第一非空行只写标题，随后输出正文和落款主体${dateOutput ? `；${dateOutput}` : '及日期'}；不得输出解释、分析、问题清单或内部处理过程。`,
     ].join('\n');
     const apiKey = await this.#credentials.readApiKey();
     if (containsSecretMaterial([reviewPrompt], [apiKey])) {
@@ -802,6 +845,7 @@ export class TaskHostService {
             .digest('hex'),
         ),
       },
+      factOverrides: task.factOverrides,
       retrieval: (() => {
         if (task.retrievalReportId === undefined)
           return {

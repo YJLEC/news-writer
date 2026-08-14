@@ -47,6 +47,21 @@ const ipcObject = <T extends z.ZodRawShape>(shape: T) =>
 
 const boundedText = (maximum: number, minimum = 0) => z.string().min(minimum).max(maximum);
 const trimmedText = (maximum: number, minimum = 1) => z.string().trim().min(minimum).max(maximum);
+const writingProfileSnapshotDtoSchema = ipcObject({
+  profileId: trimmedText(128),
+  profileVersion: trimmedText(128),
+  writingRulesVersion: trimmedText(128),
+  promptContractVersion: trimmedText(128),
+  documentStyleVersion: trimmedText(128),
+  knowledgeVersion: trimmedText(128),
+  resourceHash: sha256Schema,
+  rules: z.array(trimmedText(2_000)).max(500),
+  promptSections: ipcObject({
+    initialDraft: trimmedText(10_000),
+    secondReview: trimmedText(10_000),
+    commentRevision: trimmedText(10_000),
+  }),
+});
 const sessionIdSchema = z
   .string()
   .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
@@ -148,6 +163,20 @@ export const minutesViewDtoSchema = ipcObject({
   content: boundedText(1_000_000),
 });
 
+const factOverrideItemDtoSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('auto') }).strict(),
+  z.object({ mode: z.literal('manual'), value: trimmedText(1_000) }).strict(),
+  z.object({ mode: z.literal('none') }).strict(),
+]);
+const factOverridesDtoSchema = z
+  .object({
+    date: factOverrideItemDtoSchema.optional(),
+    location: factOverrideItemDtoSchema.optional(),
+    organizer: factOverrideItemDtoSchema.optional(),
+    time: factOverrideItemDtoSchema.optional(),
+  })
+  .strict();
+
 export const versionViewDtoSchema = ipcObject({
   id: versionIdSchema,
   createdAt: timestampSchema,
@@ -155,6 +184,7 @@ export const versionViewDtoSchema = ipcObject({
   createdBy: taskKindDtoSchema,
   taskId: taskIdSchema,
   contentSha256: sha256Schema,
+  factOverrides: factOverridesDtoSchema.optional(),
   content: boundedText(8 * 1024 * 1024, 1),
 });
 
@@ -217,6 +247,7 @@ export const taskViewDtoSchema = ipcObject({
   promptId: promptIdSchema,
   history: z.array(taskHistoryEntryDtoSchema).min(1).max(32),
   configSnapshot: resolvedGenerationConfigDtoSchema,
+  factOverrides: factOverridesDtoSchema.optional(),
   minutes: ipcObject({ revisionId: minuteRevisionIdSchema, sha256: sha256Schema }),
   supplement: ipcObject({ present: z.boolean(), sha256: sha256Schema }),
   retrieval: retrievalTraceDtoSchema,
@@ -396,6 +427,12 @@ export const editCommentDtoSchema = ipcObject({
   quotedText: boundedText(20_000, 1),
   body: trimmedText(20_000),
 });
+export const deleteCommentDtoSchema = ipcObject({
+  sessionId: sessionIdSchema,
+  expectedRevision: nonNegativeIntegerSchema,
+  commentId: commentIdSchema,
+  expectedCommentRevision: nonNegativeIntegerSchema,
+});
 export const retrievalQueryDtoSchema = ipcObject({
   sessionId: sessionIdSchema,
   expectedRevision: nonNegativeIntegerSchema,
@@ -420,6 +457,7 @@ const promptPrepareFields = {
   retrievalEnabled: z.boolean().optional(),
   newSupplementalFacts: boundedText(100_000, 1).optional(),
   taskConfig: generationConfigOverridesDtoSchema.optional(),
+  factOverrides: factOverridesDtoSchema.optional(),
 } as const;
 
 export const preparePromptDtoSchema = ipcObject(promptPrepareFields).superRefine(
@@ -452,6 +490,7 @@ export const preparePromptDtoSchema = ipcObject(promptPrepareFields).superRefine
 export const factCheckItemDtoSchema = ipcObject({
   status: z.enum(['present', 'missing']),
   evidence: boundedText(1_000, 1).optional(),
+  source: z.enum(['detected', 'user']).default('detected'),
 });
 
 export const promptPreparationDtoSchema = ipcObject({
@@ -480,8 +519,10 @@ export const promptPreparationDtoSchema = ipcObject({
     supplement: ipcObject({ present: z.boolean(), sha256: sha256Schema }),
     retrieval: retrievalTraceDtoSchema,
     comments: ipcObject({ count: z.number().int().nonnegative(), sha256: sha256Schema }),
-    writingRulesVersion: z.literal('prompt-contract-v1'),
+    writingRulesVersion: trimmedText(128),
+    profileSnapshot: writingProfileSnapshotDtoSchema.optional(),
   }),
+  factOverrides: factOverridesDtoSchema.optional(),
 });
 
 export const startTaskDtoSchema = ipcObject({
@@ -613,6 +654,7 @@ export const IPC_CHANNELS = Object.freeze({
   settingsPreviewConfig: 'nw:v1:settings:preview-config',
   commentsAdd: 'nw:v1:comments:add',
   commentsEdit: 'nw:v1:comments:edit',
+  commentsDelete: 'nw:v1:comments:delete',
   retrievalSearch: 'nw:v1:retrieval:search',
   tasksStart: 'nw:v1:tasks:start',
   tasksCancel: 'nw:v1:tasks:cancel',
@@ -681,6 +723,7 @@ export const IPC_INVOKE_CONTRACTS = Object.freeze({
   ),
   [IPC_CHANNELS.commentsAdd]: invokeContract(addCommentDtoSchema, projectViewDtoSchema),
   [IPC_CHANNELS.commentsEdit]: invokeContract(editCommentDtoSchema, projectViewDtoSchema),
+  [IPC_CHANNELS.commentsDelete]: invokeContract(deleteCommentDtoSchema, projectViewDtoSchema),
   [IPC_CHANNELS.retrievalSearch]: invokeContract(retrievalQueryDtoSchema, retrievalViewDtoSchema),
   [IPC_CHANNELS.tasksStart]: invokeContract(startTaskDtoSchema, taskViewDtoSchema),
   [IPC_CHANNELS.tasksCancel]: invokeContract(cancelTaskDtoSchema, cancelTaskResultDtoSchema),
@@ -722,6 +765,7 @@ export type SetLatestVersionDto = z.infer<typeof setLatestVersionDtoSchema>;
 export type RecoverProjectOpenDto = z.infer<typeof recoverProjectOpenDtoSchema>;
 export type AddCommentDto = z.infer<typeof addCommentDtoSchema>;
 export type EditCommentDto = z.infer<typeof editCommentDtoSchema>;
+export type DeleteCommentDto = z.infer<typeof deleteCommentDtoSchema>;
 export type RetrievalQueryDto = z.infer<typeof retrievalQueryDtoSchema>;
 export type RetrievalViewDto = z.infer<typeof retrievalViewDtoSchema>;
 export type StartTaskDto = z.infer<typeof startTaskDtoSchema>;
@@ -764,6 +808,7 @@ export interface NewsWriterApiV1 {
   comments: {
     add(input: AddCommentDto): Promise<IpcResult<ProjectViewDto>>;
     edit(input: EditCommentDto): Promise<IpcResult<ProjectViewDto>>;
+    delete(input: DeleteCommentDto): Promise<IpcResult<ProjectViewDto>>;
   };
   prompts: { prepare(input: PreparePromptDto): Promise<IpcResult<PromptPreparationDto>> };
   settings: {
