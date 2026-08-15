@@ -198,6 +198,7 @@ describe('news DOCX', () => {
     });
     expect(tokens.pageWidthTwips).toBe(11906);
     expect(tokens.pageHeightTwips).toBe(16838);
+    expect(tokens.titleLineSpacing).toBe(1);
     expect(tokens.marginTopTwips).toBe(1440);
     expect(tokens.marginBottomTwips).toBe(1440);
     expect(tokens.marginLeftTwips).toBe(1803);

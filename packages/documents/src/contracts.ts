@@ -16,6 +16,7 @@ export const documentStyleTokensSchema = z
     titleAlignment: z.enum(['left', 'center', 'right']),
     bodyAlignment: z.enum(['left', 'center', 'right', 'justify']),
     firstLineIndentPt: z.number().nonnegative().max(500),
+    titleLineSpacing: z.number().positive().max(10),
     lineSpacing: z.number().positive().max(10),
     paragraphSpacingBeforePt: z.number().nonnegative().max(500),
     paragraphSpacingAfterPt: z.number().nonnegative().max(500),

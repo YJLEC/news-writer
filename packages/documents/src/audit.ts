@@ -17,6 +17,7 @@ const defaultAuditStyle: DocumentStyleTokens = {
   titleAlignment: 'center',
   bodyAlignment: 'justify',
   firstLineIndentPt: 32,
+  titleLineSpacing: 1,
   lineSpacing: 1.5,
   paragraphSpacingBeforePt: 0,
   paragraphSpacingAfterPt: 0,
@@ -235,7 +236,7 @@ export const auditNewsDocx = async (
       new RegExp(
         `w:jc w:val="${style.titleAlignment === 'center' ? 'center' : style.titleAlignment}"`,
       ),
-      new RegExp(`w:line="${Math.round(style.lineSpacing * 240)}"`),
+      new RegExp(`w:line="${Math.round(style.titleLineSpacing * 240)}"`),
       new RegExp(`w:sz w:val="${Math.round(style.titleFontSizePt * 2)}"`),
       new RegExp(`w:ascii="${escapeRegExp(style.titleFontFamily)}"`),
       new RegExp(`w:hAnsi="${escapeRegExp(style.titleFontFamily)}"`),
