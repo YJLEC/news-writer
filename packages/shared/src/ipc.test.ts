@@ -76,7 +76,7 @@ const trace = {
     officialPublisher: 'Synthetic Publisher',
     targetChannels: ['Website'],
     defaultWordCountRecommendation: 1200,
-    rules: ['Use only supplied facts.'],
+    rules: [{ text: 'Use only supplied facts.', scenarios: ['all'] }],
     promptSections: {
       initialDraft: 'Prepare an initial draft.',
       secondReview: 'Review the draft.',

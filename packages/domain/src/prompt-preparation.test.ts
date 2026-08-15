@@ -128,7 +128,7 @@ describe('Prompt preparation', () => {
           officialPublisher: 'Synthetic Publisher',
           targetChannels: ['Website'],
           defaultWordCountRecommendation: 1200,
-          rules: ['Prefer concise factual leads.'],
+          rules: [{ text: 'Prefer concise factual leads.', scenarios: ['all'] }],
           promptSections: {
             initialDraft: 'Use the profile title convention.',
             secondReview: 'Review facts.',
@@ -141,6 +141,57 @@ describe('Prompt preparation', () => {
     expect(prepared.messages[0]?.content).toContain('机构写作规范（必须遵守）');
     expect(prepared.messages[0]?.content).toContain('Prefer concise factual leads.');
     expect(prepared.messages[0]?.content).toContain('硬性写作要求');
+  });
+
+  it('filters institution writing rules by the active scenario', async () => {
+    const minutes = await read('tests/fixtures/minutes/gf-01-official-complete.md');
+    const snapshot = {
+      profileId: 'profile_synthetic-public',
+      profileVersion: 'public-fixture-v1',
+      writingRulesVersion: 'writing-v1',
+      promptContractVersion: 'prompt-v1',
+      documentStyleVersion: 'style-v1',
+      knowledgeVersion: 'kw_0000000000000000_0000000000000000',
+      resourceHash: sha256Utf8('synthetic-profile'),
+      officialPublisher: 'Synthetic Publisher',
+      targetChannels: ['Website'],
+      defaultWordCountRecommendation: 1200,
+      rules: [
+        { text: 'Shared rule.', scenarios: ['all'] },
+        { text: 'College-only rule.', scenarios: ['college-news'] },
+      ],
+      promptSections: {
+        initialDraft: 'Profile draft.',
+        secondReview: 'Profile review.',
+        commentRevision: 'Profile revision.',
+      },
+    };
+    const official = preparePrompt(
+      {
+        ...common(minutes, 'official', 'Synthetic Publisher'),
+        kind: 'draftGeneration',
+        parent: null,
+        comments: [],
+        retrieval: { state: 'unavailable' as const },
+        profileSnapshot: snapshot,
+      },
+      { sha256Utf8 },
+    );
+    const other = preparePrompt(
+      {
+        ...common(minutes, 'other', 'Synthetic Publisher'),
+        kind: 'draftGeneration',
+        parent: null,
+        comments: [],
+        retrieval: { state: 'unavailable' as const },
+        profileSnapshot: snapshot,
+      },
+      { sha256Utf8 },
+    );
+    expect(official.messages[0]?.content).toContain('Shared rule.');
+    expect(official.messages[0]?.content).toContain('College-only rule.');
+    expect(other.messages[0]?.content).toContain('Shared rule.');
+    expect(other.messages[0]?.content).not.toContain('College-only rule.');
   });
 
   it('matches the official generation golden byte for byte', async () => {

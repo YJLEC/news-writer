@@ -107,7 +107,10 @@ export const startDesktop = (workerRunner: WorkerRunner): void => {
             targetChannels: institutionBundle.institution.targetChannels,
             defaultWordCountRecommendation:
               institutionBundle.institution.defaultWordCountRecommendation,
-            rules: institutionBundle.writingRules.rules.map((rule) => rule.text),
+            rules: institutionBundle.writingRules.rules.map((rule) => ({
+              text: rule.text,
+              scenarios: rule.scenarios,
+            })),
             promptSections: institutionBundle.promptContract.sections,
           } as const);
     const runtimeInfo: RuntimeInfoDto = {

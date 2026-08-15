@@ -78,7 +78,16 @@ export const writingProfileSnapshotSchema = z
     officialPublisher: z.string().trim().min(1).max(200),
     targetChannels: z.array(z.string().trim().min(1).max(100)).max(100),
     defaultWordCountRecommendation: z.number().int().positive().max(100_000),
-    rules: z.array(z.string().trim().min(1).max(2_000)).max(500),
+    rules: z
+      .array(
+        z
+          .object({
+            text: z.string().trim().min(1).max(2_000),
+            scenarios: z.array(z.string().trim().min(1).max(200)).max(50),
+          })
+          .strict(),
+      )
+      .max(500),
     promptSections: z
       .object({
         initialDraft: z.string().trim().min(1).max(10_000),

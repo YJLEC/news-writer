@@ -58,7 +58,14 @@ const writingProfileSnapshotDtoSchema = ipcObject({
   officialPublisher: trimmedText(200),
   targetChannels: z.array(trimmedText(100)).max(100),
   defaultWordCountRecommendation: z.number().int().positive().max(100_000),
-  rules: z.array(trimmedText(2_000)).max(500),
+  rules: z
+    .array(
+      ipcObject({
+        text: trimmedText(2_000),
+        scenarios: z.array(trimmedText(200)).max(50),
+      }),
+    )
+    .max(500),
   promptSections: ipcObject({
     initialDraft: trimmedText(10_000),
     secondReview: trimmedText(10_000),

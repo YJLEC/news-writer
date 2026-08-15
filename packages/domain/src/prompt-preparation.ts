@@ -491,8 +491,11 @@ const profileGuidance = (
 ): string => {
   const snapshot = input.profileSnapshot;
   if (snapshot === undefined) return '';
+  const applicableScenarios =
+    input.profile === 'official' ? ['all', 'college-news'] : ['all', 'other-news'];
   const rules = snapshot.rules
-    .map((rule, index) => `${index + 1}. ${escapeMaterial(rule)}`)
+    .filter((rule) => rule.scenarios.some((scenario) => applicableScenarios.includes(scenario)))
+    .map((rule, index) => `${index + 1}. ${escapeMaterial(rule.text)}`)
     .join('\n');
   const body = [
     escapeMaterial(snapshot.promptSections[section]),
