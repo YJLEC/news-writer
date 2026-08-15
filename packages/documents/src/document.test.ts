@@ -5,7 +5,12 @@ import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 
 import { auditDocxCompatibilitySource, auditNewsDocx } from './audit';
-import { buildNewsDocx, missingNewsDocumentFields, parseNewsDocument } from './document';
+import {
+  buildNewsDocx,
+  documentStyleToTokens,
+  missingNewsDocumentFields,
+  parseNewsDocument,
+} from './document';
 import { suggestDocxFileName } from './filename';
 
 const fixture = async (name: string) =>
@@ -164,6 +169,68 @@ describe('news DOCX', () => {
       dateText: '2026年8月',
     });
     expect(parsed.bodyParagraphs).toEqual(['正文第一段']);
+  });
+
+  it('converts cm and mm page dimensions to twips', () => {
+    const tokens = documentStyleToTokens({
+      page: {
+        width: 'A4',
+        height: 'A4',
+        margins: { top: '2.54cm', right: '3.18cm', bottom: '2.54cm', left: '3.18cm' },
+      },
+      title: {
+        fontFamily: '方正小标宋简体',
+        fontSizePt: 22,
+        alignment: 'center',
+        bold: false,
+        lineSpacing: 1,
+      },
+      body: {
+        fontFamily: '仿宋_GB2312',
+        fontSizePt: 16,
+        alignment: 'justify',
+        firstLineIndentPt: 32,
+        lineSpacing: 1.5,
+        paragraphSpacingBeforePt: 0,
+        paragraphSpacingAfterPt: 0,
+      },
+      signoff: { alignment: 'right' },
+    });
+    expect(tokens.pageWidthTwips).toBe(11906);
+    expect(tokens.pageHeightTwips).toBe(16838);
+    expect(tokens.marginTopTwips).toBe(1440);
+    expect(tokens.marginBottomTwips).toBe(1440);
+    expect(tokens.marginLeftTwips).toBe(1803);
+    expect(tokens.marginRightTwips).toBe(1803);
+  });
+
+  it('keeps millimeter page dimensions working', () => {
+    const tokens = documentStyleToTokens({
+      page: {
+        width: 'A4',
+        height: 'A4',
+        margins: { top: '25mm', right: '25mm', bottom: '25mm', left: '25mm' },
+      },
+      title: {
+        fontFamily: '方正小标宋简体',
+        fontSizePt: 22,
+        alignment: 'center',
+        bold: false,
+        lineSpacing: 1,
+      },
+      body: {
+        fontFamily: '仿宋_GB2312',
+        fontSizePt: 16,
+        alignment: 'justify',
+        firstLineIndentPt: 32,
+        lineSpacing: 1.5,
+        paragraphSpacingBeforePt: 0,
+        paragraphSpacingAfterPt: 0,
+      },
+      signoff: { alignment: 'right' },
+    });
+    expect(tokens.marginTopTwips).toBe(1417);
+    expect(tokens.marginLeftTwips).toBe(1417);
   });
 
   it('does not emit keep-next margin markers for title or sign-off', async () => {

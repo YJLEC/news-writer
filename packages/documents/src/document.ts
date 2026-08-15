@@ -75,9 +75,10 @@ export const documentStyleToTokens = (style: {
     const normalized = value.trim().toUpperCase();
     if ((kind === 'width' || kind === 'height') && normalized === 'A4')
       return kind === 'width' ? 11906 : 16838;
-    const match = /^(\d+(?:\.\d+)?)MM$/u.exec(normalized);
+    const match = /^(\d+(?:\.\d+)?)(MM|CM)$/u.exec(normalized);
     if (match === null) throw new Error(`Unsupported document dimension: ${value}`);
-    return Math.round((Number(match[1]) / 25.4) * 1440);
+    const millimeters = match[2] === 'CM' ? Number(match[1]) * 10 : Number(match[1]);
+    return Math.round((millimeters / 25.4) * 1440);
   };
   return {
     pageWidthTwips: pageTwips(style.page.width, 'width'),
@@ -478,9 +479,10 @@ export const buildNewsDocx = async (
             /(<w:pStyle w:val="NewsBody"\/>)/gu,
             '$1<w:snapToGrid w:val="0"/><w:overflowPunct w:val="1"/>',
           )
+          .replace(/(<w:pStyle w:val="NewsTitle"\/>)/gu, '$1<w:snapToGrid w:val="0"/>')
           .replace(
-            /(<w:pStyle w:val="(?:NewsTitle|NewsSignOff|NewsDate)"\/>)/gu,
-            '$1<w:snapToGrid w:val="0"/>',
+            /(<w:pStyle w:val="(?:NewsSignOff|NewsDate)"\/>)/gu,
+            '$1<w:snapToGrid w:val="1"/>',
           ),
       );
     }

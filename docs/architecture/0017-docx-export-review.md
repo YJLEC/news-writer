@@ -83,8 +83,8 @@ interface NewsDocument {
 | 颜色/装饰 | 全文纯黑；无边框、底纹、横线、水印、表格、图片、目录和封面 |
 | 标题样式 | `NewsTitle`；方正小标宋简体，22 pt/二号，非粗体，居中；单倍行距 `240 auto`；段前/后 `0`；无缩进；`keepNext=true`、`widowControl=true`、`snapToGrid=false` |
 | 正文样式 | `NewsBody`；仿宋_GB2312，16 pt/三号，黑色，两端对齐；1.5 倍行距 `360 auto`；段前/后 `0`；首行 `640 DXA`（两个 16 pt 汉字）；`widowControl=true`、`snapToGrid=false` |
-| 落款样式 | `NewsSignOff`；同正文字体字号，右对齐，1.5 倍行距，段前/后 `0`，无首行缩进，`keepNext=true`、`snapToGrid=false` |
-| 日期样式 | `NewsDate`；同正文字体字号，右对齐，1.5 倍行距，段前/后 `0`，无首行缩进，`widowControl=true`、`snapToGrid=false` |
+| 落款样式 | `NewsSignOff`；同正文字体字号，右对齐，1.5 倍行距，段前/后 `0`，无首行缩进，`snapToGrid=true`（对齐文档网格，对齐 BUPT-QMUL 送审标准） |
+| 日期样式 | `NewsDate`；同正文字体字号，右对齐，1.5 倍行距，段前/后 `0`，无首行缩进，`widowControl=true`、`snapToGrid=true` |
 | 分页 | 自动分页；标题不得与首段分离，落款不得与日期分离；不插入人为分页或空段落制造间距 |
 | 字体槽位 | `ascii`、`hAnsi`、`eastAsia`、`cs` 全部显式写入对应目标字体，不依赖 Word theme/default |
 | 元数据 | creator/lastModifiedBy 固定为 `News Writer`，title 可为稿件标题；不得写 Windows 用户名、项目路径、Prompt、version/task/comment ID、API Key 或诊断信息；无 comments、tracked changes、custom properties |

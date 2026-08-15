@@ -282,9 +282,11 @@ export const auditNewsDocx = async (
   assertTokens(styleBlock('NewsBody'), [/w:lineRule="auto"/u], 'body line rule');
   if (
     (documentXml.match(/<w:snapToGrid w:val="0"\/>/gu) ?? []).length !==
-    expected.bodyParagraphs.length + 3
+    expected.bodyParagraphs.length + 1
   )
-    throw new Error('DOCX paragraphs do not explicitly disable grid snapping');
+    throw new Error('DOCX title and body paragraphs do not disable grid snapping');
+  if ((documentXml.match(/<w:snapToGrid w:val="1"\/>/gu) ?? []).length !== 2)
+    throw new Error('DOCX sign-off and date paragraphs do not snap to the document grid');
   if (
     (documentXml.match(/<w:overflowPunct w:val="1"\/>/gu) ?? []).length !==
     expected.bodyParagraphs.length
