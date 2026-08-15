@@ -9,6 +9,7 @@ import {
   projectIdSchema,
   retrievalReportIdSchema,
   exportRecordIdSchema,
+  imageIdSchema,
   safeAppErrorSchema,
   sha256Schema,
   taskIdSchema,
@@ -318,6 +319,14 @@ export const exportRecordViewDtoSchema = z.union([
   }),
 ]);
 
+const imageDimensionSchema = z.number().int().positive().max(100_000);
+
+const imageViewDtoSchema = ipcObject({
+  id: imageIdSchema,
+  widthPx: imageDimensionSchema,
+  heightPx: imageDimensionSchema,
+});
+
 export const projectViewDtoSchema = ipcObject({
   sessionId: sessionIdSchema,
   revision: nonNegativeIntegerSchema,
@@ -337,6 +346,53 @@ export const projectViewDtoSchema = ipcObject({
   tasks: z.array(taskViewDtoSchema).max(10_000),
   retrievalReports: z.array(retrievalSummaryDtoSchema).max(10_000),
   exportRecords: z.array(exportRecordViewDtoSchema).max(10_000),
+  images: z.array(imageViewDtoSchema).max(5),
+});
+
+const imagePreviewItemDtoSchema = ipcObject({
+  id: imageIdSchema,
+  widthPx: imageDimensionSchema,
+  heightPx: imageDimensionSchema,
+  previewDataUrl: trimmedText(2_200_000),
+});
+
+export const imagesListDtoSchema = ipcObject({ sessionId: sessionIdSchema });
+export const imagesListResultDtoSchema = ipcObject({
+  sessionId: sessionIdSchema,
+  revision: nonNegativeIntegerSchema,
+  images: z.array(imagePreviewItemDtoSchema).max(5),
+});
+
+export const addImagesDtoSchema = ipcObject({
+  sessionId: sessionIdSchema,
+  expectedRevision: nonNegativeIntegerSchema,
+  items: z
+    .array(
+      ipcObject({
+        dataBase64: trimmedText(1_500_000),
+        widthPx: imageDimensionSchema,
+        heightPx: imageDimensionSchema,
+      }),
+    )
+    .min(1)
+    .max(5),
+});
+
+export const removeImageDtoSchema = ipcObject({
+  sessionId: sessionIdSchema,
+  expectedRevision: nonNegativeIntegerSchema,
+  imageId: imageIdSchema,
+});
+
+export const reorderImagesDtoSchema = ipcObject({
+  sessionId: sessionIdSchema,
+  expectedRevision: nonNegativeIntegerSchema,
+  orderedIds: z.array(imageIdSchema).max(5),
+});
+
+export const clearImagesDtoSchema = ipcObject({
+  sessionId: sessionIdSchema,
+  expectedRevision: nonNegativeIntegerSchema,
 });
 
 export const dialogResultSchema = <T extends z.ZodType>(dataSchema: T) =>
@@ -667,6 +723,11 @@ export const IPC_CHANNELS = Object.freeze({
   tasksCancel: 'nw:v1:tasks:cancel',
   tasksStatusEvent: 'nw:v1:tasks:status',
   documentsExportWithDialog: 'nw:v1:documents:export-with-dialog',
+  imagesList: 'nw:v1:images:list',
+  imagesAdd: 'nw:v1:images:add',
+  imagesRemove: 'nw:v1:images:remove',
+  imagesReorder: 'nw:v1:images:reorder',
+  imagesClear: 'nw:v1:images:clear',
 } as const);
 
 const invokeContract = <Request extends z.ZodType, Data extends z.ZodType>(
@@ -737,6 +798,11 @@ export const IPC_INVOKE_CONTRACTS = Object.freeze({
     exportDocumentDtoSchema,
     exportDocumentResultDtoSchema,
   ),
+  [IPC_CHANNELS.imagesList]: invokeContract(imagesListDtoSchema, imagesListResultDtoSchema),
+  [IPC_CHANNELS.imagesAdd]: invokeContract(addImagesDtoSchema, projectViewDtoSchema),
+  [IPC_CHANNELS.imagesRemove]: invokeContract(removeImageDtoSchema, projectViewDtoSchema),
+  [IPC_CHANNELS.imagesReorder]: invokeContract(reorderImagesDtoSchema, projectViewDtoSchema),
+  [IPC_CHANNELS.imagesClear]: invokeContract(clearImagesDtoSchema, projectViewDtoSchema),
 });
 
 export const IPC_EVENT_CONTRACTS = Object.freeze({
@@ -783,6 +849,12 @@ export type TaskStatusEventDto = z.infer<typeof taskStatusEventDtoSchema>;
 export type ExportDocumentDto = z.infer<typeof exportDocumentDtoSchema>;
 export type ExportDocumentResultDto = z.infer<typeof exportDocumentResultDtoSchema>;
 export type ExportRecordViewDto = z.infer<typeof exportRecordViewDtoSchema>;
+export type ImagesListDto = z.infer<typeof imagesListDtoSchema>;
+export type ImagesListResultDto = z.infer<typeof imagesListResultDtoSchema>;
+export type AddImagesDto = z.infer<typeof addImagesDtoSchema>;
+export type RemoveImageDto = z.infer<typeof removeImageDtoSchema>;
+export type ReorderImagesDto = z.infer<typeof reorderImagesDtoSchema>;
+export type ClearImagesDto = z.infer<typeof clearImagesDtoSchema>;
 
 export interface NewsWriterApiV1 {
   runtime: { getInfo(): Promise<IpcResult<RuntimeInfoDto>> };
@@ -827,5 +899,12 @@ export interface NewsWriterApiV1 {
   };
   documents: {
     exportWithDialog(input: ExportDocumentDto): Promise<IpcResult<ExportDocumentResultDto>>;
+  };
+  images: {
+    list(input: ImagesListDto): Promise<IpcResult<ImagesListResultDto>>;
+    add(input: AddImagesDto): Promise<IpcResult<ProjectViewDto>>;
+    remove(input: RemoveImageDto): Promise<IpcResult<ProjectViewDto>>;
+    reorder(input: ReorderImagesDto): Promise<IpcResult<ProjectViewDto>>;
+    clear(input: ClearImagesDto): Promise<IpcResult<ProjectViewDto>>;
   };
 }

@@ -1,5 +1,7 @@
 import {
   commentIdSchema,
+  imageArtifactRefSchema,
+  imageIdSchema,
   minuteIdSchema,
   minuteRevisionIdSchema,
   projectIdSchema,
@@ -9,6 +11,8 @@ import {
   versionIdSchema,
   type Clock,
   type IdGenerator,
+  type ImageArtifactRef,
+  type ImageId,
   type RuntimeVersionSnapshot,
   type SafeAppError,
   type TextArtifactRef,
@@ -21,6 +25,8 @@ import {
   commentRecordSchema,
   exportRecordSchema,
   generationConfigOverridesSchema,
+  imageAttachmentSchema,
+  MAX_PROJECT_IMAGES,
   minutesSnapshotSchema,
   promptRecordSchema,
   queueTaskInputSchema,
@@ -150,6 +156,7 @@ export const createProject = (
     versions: [],
     comments: [],
     retrievalReports: [],
+    images: [],
     exportRecords: [],
   });
 };
@@ -654,6 +661,92 @@ export const recordExport = (
   return withRevision(project, at, runtime, {
     exportRecords: [...project.exportRecords, parsed],
   });
+};
+
+export const addImages = (
+  project: ProjectAggregateV1,
+  refs: readonly ImageArtifactRef[],
+  expectedRevision: number,
+  dependencies: DomainDependencies,
+): ProjectAggregateV1 => {
+  assertRevision(project, expectedRevision);
+  assertActive(project);
+  assertNoActiveTask(project);
+  const at = dependencies.clock.now();
+  const additions = imageArtifactRefSchema
+    .array()
+    .parse([...refs])
+    .map((ref) =>
+      imageAttachmentSchema.parse({
+        id: parseGeneratedId(imageIdSchema, dependencies.ids.next('image')),
+        ref,
+        addedAt: at,
+      }),
+    );
+  const images = [...project.images, ...additions];
+  if (images.length > MAX_PROJECT_IMAGES) {
+    throw new DomainRuleError('STATE_CONFLICT', 'Image count exceeds the limit');
+  }
+  return withRevision(project, at, dependencies.runtime, { images });
+};
+
+export const removeImage = (
+  project: ProjectAggregateV1,
+  imageId: ImageId,
+  expectedRevision: number,
+  at: Timestamp,
+  runtime: RuntimeVersionSnapshot,
+): ProjectAggregateV1 => {
+  assertRevision(project, expectedRevision);
+  assertActive(project);
+  assertNoActiveTask(project);
+  if (!project.images.some((image) => image.id === imageId)) {
+    throw new DomainRuleError('ENTITY_NOT_FOUND', 'Image does not exist');
+  }
+  return withRevision(project, at, runtime, {
+    images: project.images.filter((image) => image.id !== imageId),
+  });
+};
+
+export const reorderImages = (
+  project: ProjectAggregateV1,
+  orderedIds: readonly ImageId[],
+  expectedRevision: number,
+  at: Timestamp,
+  runtime: RuntimeVersionSnapshot,
+): ProjectAggregateV1 => {
+  assertRevision(project, expectedRevision);
+  assertActive(project);
+  assertNoActiveTask(project);
+  const currentIds = project.images.map((image) => image.id);
+  const normalized = imageIdSchema.array().parse([...orderedIds]);
+  if (
+    normalized.length !== currentIds.length ||
+    new Set(normalized).size !== normalized.length ||
+    normalized.some((id) => !currentIds.includes(id))
+  ) {
+    throw new DomainRuleError(
+      'STATE_CONFLICT',
+      'Image order must be a permutation of current images',
+    );
+  }
+  const byId = new Map(project.images.map((image) => [image.id, image]));
+  const images = normalized.map((id) => byId.get(id)!);
+  if (normalized.every((id, index) => id === currentIds[index])) return project;
+  return withRevision(project, at, runtime, { images });
+};
+
+export const clearImages = (
+  project: ProjectAggregateV1,
+  expectedRevision: number,
+  at: Timestamp,
+  runtime: RuntimeVersionSnapshot,
+): ProjectAggregateV1 => {
+  assertRevision(project, expectedRevision);
+  assertActive(project);
+  assertNoActiveTask(project);
+  if (project.images.length === 0) return project;
+  return withRevision(project, at, runtime, { images: [] });
 };
 
 export const getCurrentVersionChain = (project: ProjectAggregateV1): VersionRecord[] => {

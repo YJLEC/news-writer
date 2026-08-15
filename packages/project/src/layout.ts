@@ -2,6 +2,7 @@ import { assertValidProjectAggregate, type ProjectAggregateV1 } from '@news-writ
 import {
   containsSecretMaterial,
   projectRelativePathSchema,
+  type ImageArtifactRef,
   type ProjectRelativePath,
   type TextArtifactRef,
 } from '@news-writer/shared';
@@ -28,6 +29,7 @@ export type ArtifactInputs = ReadonlyMap<string, Uint8Array | string>;
 export interface MaterializedProject {
   aggregate: ProjectAggregateV1;
   textArtifacts: Map<string, Buffer>;
+  imageArtifacts: Map<string, Buffer>;
 }
 
 export interface CandidateObject {
@@ -132,6 +134,20 @@ const expectedContentPaths = (project: ProjectAggregateV1): Map<string, TextArti
   return expected;
 };
 
+const expectedImagePaths = (
+  project: ProjectAggregateV1,
+): Map<string, { ref: ImageArtifactRef; id: string }> => {
+  const expected = new Map<string, { ref: ImageArtifactRef; id: string }>();
+  for (const image of project.images) {
+    const expectedPath = `assets/images/${image.id}.jpg`;
+    if (image.ref.relativePath !== expectedPath) {
+      throw new ProjectError('PROJECT_PATH_INVALID', 'Image path is inconsistent');
+    }
+    expected.set(image.ref.relativePath, { ref: image.ref, id: image.id });
+  }
+  return expected;
+};
+
 const contentKind = (ref: TextArtifactRef): 'minutes' | 'promptContent' | 'versionContent' => {
   if (ref.relativePath.startsWith('content/minutes/')) return 'minutes';
   if (ref.relativePath.startsWith('content/prompts/')) return 'promptContent';
@@ -166,27 +182,46 @@ export const materializeProjectState = (
     }
   }
   const contentRefs = expectedContentPaths(project);
+  const imageRefs = expectedImagePaths(project);
   const candidates: CandidateObject[] = [];
   const suppliedArtifacts = new Map<string, Buffer>();
   for (const [relativePath, value] of artifactInputs) {
-    const ref = contentRefs.get(relativePath);
-    if (ref === undefined)
-      throw new ProjectError('PROJECT_PATH_INVALID', 'Unexpected text artifact path');
-    const bytes = typeof value === 'string' ? Buffer.from(value, 'utf8') : Buffer.from(value);
-    verifyBytes(bytes, ref.byteLength, ref.sha256);
-    assertNoCredentialMaterial(bytes);
-    suppliedArtifacts.set(relativePath, bytes);
-    candidates.push({
-      bytes,
-      ref: storedObjectRefSchema.parse({
-        relativePath: ref.relativePath,
-        sha256: ref.sha256,
-        byteLength: ref.byteLength,
-        kind: contentKind(ref),
-        entityId: contentEntityId(project, ref),
-        recordVersion: 1,
-      }),
-    });
+    const textRef = contentRefs.get(relativePath);
+    const imageRef = imageRefs.get(relativePath);
+    if (textRef === undefined && imageRef === undefined)
+      throw new ProjectError('PROJECT_PATH_INVALID', 'Unexpected artifact path');
+    if (textRef !== undefined) {
+      const bytes = typeof value === 'string' ? Buffer.from(value, 'utf8') : Buffer.from(value);
+      verifyBytes(bytes, textRef.byteLength, textRef.sha256);
+      assertNoCredentialMaterial(bytes);
+      suppliedArtifacts.set(relativePath, bytes);
+      candidates.push({
+        bytes,
+        ref: storedObjectRefSchema.parse({
+          relativePath: textRef.relativePath,
+          sha256: textRef.sha256,
+          byteLength: textRef.byteLength,
+          kind: contentKind(textRef),
+          entityId: contentEntityId(project, textRef),
+          recordVersion: 1,
+        }),
+      });
+    } else if (imageRef !== undefined) {
+      const bytes = Buffer.from(value);
+      verifyBytes(bytes, imageRef.ref.byteLength, imageRef.ref.sha256);
+      suppliedArtifacts.set(relativePath, bytes);
+      candidates.push({
+        bytes,
+        ref: storedObjectRefSchema.parse({
+          relativePath: imageRef.ref.relativePath,
+          sha256: imageRef.ref.sha256,
+          byteLength: imageRef.ref.byteLength,
+          kind: 'image',
+          entityId: imageRef.id,
+          recordVersion: 1,
+        }),
+      });
+    }
   }
 
   const minutes = makeRecord('minutes', project.minutes);
@@ -207,7 +242,18 @@ export const materializeProjectState = (
     ...retrievalReports,
     ...exportRecords,
   );
-  candidates.forEach((candidate) => assertNoCredentialMaterial(candidate.bytes));
+  candidates.forEach((candidate) => {
+    if (candidate.ref.kind !== 'image') assertNoCredentialMaterial(candidate.bytes);
+  });
+  const imageOrder = new Map(project.images.map((image, index) => [image.ref.relativePath, index]));
+  const imageStoredRefs = candidates
+    .filter((candidate) => candidate.ref.kind === 'image')
+    .toSorted(
+      (left, right) =>
+        (imageOrder.get(left.ref.relativePath) ?? 0) -
+        (imageOrder.get(right.ref.relativePath) ?? 0),
+    )
+    .map((candidate) => candidate.ref);
   const state: ProjectStateIndexV1 = {
     project: {
       name: project.name,
@@ -231,6 +277,7 @@ export const materializeProjectState = (
     comments: comments.map((value) => value.ref),
     retrievalReports: retrievalReports.map((value) => value.ref),
     exportRecords: exportRecords.map((value) => value.ref),
+    images: imageStoredRefs,
   };
   assertNoCredentialMaterial(serializeJson(state.project));
   return { state, candidates, suppliedArtifacts };
@@ -320,8 +367,18 @@ export const hydrateProjectState = async (
     assertNoCredentialMaterial(bytes);
     textArtifacts.set(ref.relativePath, bytes);
   }
+  const imageArtifacts = new Map<string, Buffer>();
+  for (const image of parsed.images) {
+    await assertExistingAncestorsHaveNoReparsePoint(root, image.ref.relativePath);
+    const bytes = await readLimitedFile(
+      resolveProjectPath(root, image.ref.relativePath),
+      image.ref.byteLength,
+    );
+    verifyBytes(bytes, image.ref.byteLength, image.ref.sha256);
+    imageArtifacts.set(image.ref.relativePath, bytes);
+  }
   const fullyValidated = assertValidProjectAggregate(parsed, {
     readText: (ref) => textArtifacts.get(ref.relativePath)?.toString('utf8'),
   });
-  return { aggregate: fullyValidated, textArtifacts };
+  return { aggregate: fullyValidated, textArtifacts, imageArtifacts };
 };

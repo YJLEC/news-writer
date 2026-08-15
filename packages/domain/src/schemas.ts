@@ -2,6 +2,8 @@ import {
   commentIdSchema,
   compareTimestamps,
   exportRecordIdSchema,
+  imageArtifactRefSchema,
+  imageIdSchema,
   minuteIdSchema,
   minuteRevisionIdSchema,
   nonNegativeIntegerSchema,
@@ -98,6 +100,18 @@ export const writingProfileSnapshotSchema = z
   })
   .strict();
 export type WritingProfileSnapshot = z.infer<typeof writingProfileSnapshotSchema>;
+
+export const MAX_PROJECT_IMAGES = 5;
+
+export const imageAttachmentSchema = z
+  .object({
+    id: imageIdSchema,
+    ref: imageArtifactRefSchema,
+    addedAt: timestampSchema,
+  })
+  .strict();
+
+export type ImageAttachment = z.infer<typeof imageAttachmentSchema>;
 
 export const generationConfigValuesSchema = z
   .object({
@@ -580,6 +594,7 @@ export const projectAggregateSchema = z
     lastWrittenWith: runtimeVersionSnapshotSchema,
     minutes: minutesSnapshotSchema,
     projectConfig: generationConfigOverridesSchema,
+    images: z.array(imageAttachmentSchema).max(MAX_PROJECT_IMAGES),
     latestVersionId: versionIdSchema.nullable(),
     prompts: z.array(promptRecordSchema),
     tasks: z.array(taskRecordSchema),

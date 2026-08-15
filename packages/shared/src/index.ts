@@ -117,6 +117,22 @@ export const textArtifactRefSchema = z
 
 export type TextArtifactRef = z.infer<typeof textArtifactRefSchema>;
 
+export const imageIdSchema = brandedUuid('ImageId');
+export type ImageId = z.infer<typeof imageIdSchema>;
+
+export const imageArtifactRefSchema = z
+  .object({
+    relativePath: projectRelativePathSchema,
+    sha256: sha256Schema,
+    byteLength: nonNegativeIntegerSchema,
+    mediaType: z.literal('image/jpeg'),
+    widthPx: positiveIntegerSchema,
+    heightPx: positiveIntegerSchema,
+  })
+  .strict();
+
+export type ImageArtifactRef = z.infer<typeof imageArtifactRefSchema>;
+
 export const safeAppErrorCodeSchema = z.enum([
   'AUTH_REQUIRED',
   'AUTH_REJECTED',
@@ -214,7 +230,8 @@ export type EntityKind =
   | 'retrievalReport'
   | 'exportRecord'
   | 'minute'
-  | 'minuteRevision';
+  | 'minuteRevision'
+  | 'image';
 
 export interface Clock {
   now(): Timestamp;

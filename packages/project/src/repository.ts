@@ -235,6 +235,18 @@ const canonicalStateRefs = (
   for (const version of project.versions) {
     refs.push(textObjectRef(version.contentRef, 'versionContent', version.id));
   }
+  for (const image of project.images) {
+    refs.push(
+      storedObjectRefSchema.parse({
+        relativePath: image.ref.relativePath,
+        sha256: image.ref.sha256,
+        byteLength: image.ref.byteLength,
+        kind: 'image',
+        entityId: image.id,
+        recordVersion: 1,
+      }),
+    );
+  }
   return refs;
 };
 
@@ -538,6 +550,9 @@ const referencedObjectHashes = (materialized: MaterializedProject | null): Map<s
     ...materialized.aggregate.versions.map((version) => version.contentRef),
   ];
   textRefs.forEach((ref) => result.set(ref.relativePath, ref.sha256));
+  materialized.aggregate.images.forEach((image) =>
+    result.set(image.ref.relativePath, image.ref.sha256),
+  );
   return result;
 };
 
@@ -564,7 +579,22 @@ const writeCommit = async (root: string, input: WriteCommitInput): Promise<Proje
       }
     }
   }
-  for (const bytes of combinedArtifacts.values()) {
+  const imageRefs = input.aggregate.images.map((image) => image.ref);
+  for (const ref of imageRefs) {
+    if (!combinedArtifacts.has(ref.relativePath)) {
+      try {
+        const bytes = await readFile(resolveProjectPath(root, ref.relativePath));
+        verifyBytes(bytes, ref.byteLength, ref.sha256);
+        combinedArtifacts.set(ref.relativePath, bytes);
+      } catch (error) {
+        throw error instanceof ProjectError
+          ? error
+          : new ProjectError('PROJECT_HASH_MISMATCH', 'A referenced image artifact is missing');
+      }
+    }
+  }
+  for (const [relativePath, bytes] of combinedArtifacts) {
+    if (input.aggregate.images.some((image) => image.ref.relativePath === relativePath)) continue;
     if (containsSecretMaterial([bytes.toString('utf8')])) {
       throw ProjectError.schemaInvalid('Credential material cannot be stored in a project');
     }
@@ -933,6 +963,7 @@ export const openProject = async (input: OpenProjectInput): Promise<ProjectSessi
   await assertPathHasNoReparsePoint(root, projectRelativePathSchema.parse('.news-writer'));
   await assertPathHasNoReparsePoint(root, projectRelativePathSchema.parse('content'));
   await assertPathHasNoReparsePoint(root, projectRelativePathSchema.parse('records'));
+  await assertPathHasNoReparsePoint(root, projectRelativePathSchema.parse('assets'));
   const lock = await ProjectLock.acquire(storageRoot(root), input.appVersion);
   try {
     await probeFileSystemCapabilities(storageRoot(root));

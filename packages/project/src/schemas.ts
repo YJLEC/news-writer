@@ -43,6 +43,7 @@ export const storedObjectKindSchema = z.enum([
   'comment',
   'retrievalReport',
   'exportRecord',
+  'image',
   'snapshot',
 ]);
 
@@ -93,6 +94,7 @@ export const projectStateIndexV1Schema = z
     comments: z.array(storedObjectRefSchema),
     retrievalReports: z.array(storedObjectRefSchema),
     exportRecords: z.array(storedObjectRefSchema),
+    images: z.array(storedObjectRefSchema),
   })
   .strict();
 
