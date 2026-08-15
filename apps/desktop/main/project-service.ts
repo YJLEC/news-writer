@@ -1070,14 +1070,9 @@ export class ProjectService {
   async #recoverInterruptedTask(project: ProjectSession): Promise<void> {
     const current = project.read();
     const interrupted = current.tasks.find((task) =>
-      [
-        'queued',
-        'preparing',
-        'requesting',
-        'processing',
-        'reviewing',
-        'saving',
-      ].includes(task.status),
+      ['queued', 'preparing', 'requesting', 'processing', 'reviewing', 'saving'].includes(
+        task.status,
+      ),
     );
     if (interrupted === undefined) return;
     const error = safeAppErrorSchema.parse({

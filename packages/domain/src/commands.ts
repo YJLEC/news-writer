@@ -587,7 +587,9 @@ export const commitSuccessfulVersion = (
     taskStatusSnapshot: 'succeeded',
     configSnapshot: task.configSnapshot,
     ...(task.profileSnapshot === undefined ? {} : { profileSnapshot: task.profileSnapshot }),
-    ...(task.factOverrides === undefined ? {} : { factOverrides: structuredClone(task.factOverrides) }),
+    ...(task.factOverrides === undefined
+      ? {}
+      : { factOverrides: structuredClone(task.factOverrides) }),
     contentRef: input.contentRef,
   });
   const succeeded = taskRecordSchema.parse({

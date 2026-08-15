@@ -871,14 +871,7 @@ const Workspace = ({
     end: number;
   } | null>(null);
   const [modal, setModal] = useState<
-    | 'auth'
-    | 'comment'
-    | 'promptWarning'
-    | 'stale'
-    | 'cancel'
-    | 'settings'
-    | 'exportFields'
-    | null
+    'auth' | 'comment' | 'promptWarning' | 'stale' | 'cancel' | 'settings' | 'exportFields' | null
   >(null);
   const [confirmation, setConfirmation] = useState<{
     title: string;
@@ -919,7 +912,8 @@ const Workspace = ({
     const action = { type: 'editMinutes' as const, value };
     stateRef.current = workspaceReducer(stateRef.current, action);
     dispatch(action);
-    if (minutesAutosaveTimerRef.current !== null) window.clearTimeout(minutesAutosaveTimerRef.current);
+    if (minutesAutosaveTimerRef.current !== null)
+      window.clearTimeout(minutesAutosaveTimerRef.current);
     minutesAutosaveTimerRef.current = window.setTimeout(() => {
       minutesAutosaveTimerRef.current = null;
       saveMinutes();
@@ -1201,8 +1195,7 @@ const Workspace = ({
             base: result.messages.find((message) => message.role === 'user')?.content ?? '',
             systemContent:
               result.messages.find((message) => message.role === 'system')?.content ?? '',
-            systemBase:
-              result.messages.find((message) => message.role === 'system')?.content ?? '',
+            systemBase: result.messages.find((message) => message.role === 'system')?.content ?? '',
             dirty: false,
             preparation: result,
             factOverrides:
@@ -1700,57 +1693,57 @@ const Workspace = ({
             </div>
           </header>
           <div className="editor-body">
-          {state.leftDocument === 'prompt' && state.prompt && (
-            <div className={`prompt-system${systemOpen ? '' : ' prompt-system--collapsed'}`}>
-              <button
-                className="prompt-system-label"
-                onClick={() => setSystemOpen((open) => !open)}
-                aria-expanded={systemOpen}
-                title={systemOpen ? '折叠系统与机构写作规范' : '展开系统与机构写作规范'}
-              >
-                <span>{systemOpen ? '▾' : '▸'}</span>
-                系统与机构写作规范（{state.prompt.unlocked ? '可编辑' : '只读'}）
-              </button>
-              {systemOpen && (
-                <MonacoTextEditor
-                  ariaLabel="系统与机构写作规范"
-                  uri={`${leftUri}/system`}
-                  value={state.prompt.systemContent}
-                  readOnly={leftReadOnly}
-                  onChange={(value) => dispatch({ type: 'editSystemPrompt', value })}
-                  tabFocusMode={tabFocusMode}
-                />
-              )}
-            </div>
-          )}
-          <MonacoTextEditor
-            ariaLabel="左侧编辑器"
-            uri={leftUri}
-            value={leftValue}
-            readOnly={leftReadOnly}
-            {...(state.leftDocument === 'minutes' ? { onSave: saveMinutes } : {})}
-            focusToken={leftFocusToken}
-            tabFocusMode={tabFocusMode}
-            commentAnchors={
-              state.leftDocument === 'history' && selected
-                ? state.view.comments
-                    .filter(
-                      (comment) =>
-                        comment.versionId === selected.id &&
-                        isAnchorValid(selected.content, selected.contentSha256, comment.anchor),
-                    )
-                    .map((comment) => ({
-                      id: comment.id,
-                      start: comment.anchor.start,
-                      end: comment.anchor.end,
-                    }))
-                : []
-            }
-            onChange={(value) => {
-              if (state.leftDocument === 'minutes') editMinutesDraft(value);
-              else if (state.leftDocument === 'prompt') dispatch({ type: 'editPrompt', value });
-            }}
-          />
+            {state.leftDocument === 'prompt' && state.prompt && (
+              <div className={`prompt-system${systemOpen ? '' : ' prompt-system--collapsed'}`}>
+                <button
+                  className="prompt-system-label"
+                  onClick={() => setSystemOpen((open) => !open)}
+                  aria-expanded={systemOpen}
+                  title={systemOpen ? '折叠系统与机构写作规范' : '展开系统与机构写作规范'}
+                >
+                  <span>{systemOpen ? '▾' : '▸'}</span>
+                  系统与机构写作规范（{state.prompt.unlocked ? '可编辑' : '只读'}）
+                </button>
+                {systemOpen && (
+                  <MonacoTextEditor
+                    ariaLabel="系统与机构写作规范"
+                    uri={`${leftUri}/system`}
+                    value={state.prompt.systemContent}
+                    readOnly={leftReadOnly}
+                    onChange={(value) => dispatch({ type: 'editSystemPrompt', value })}
+                    tabFocusMode={tabFocusMode}
+                  />
+                )}
+              </div>
+            )}
+            <MonacoTextEditor
+              ariaLabel="左侧编辑器"
+              uri={leftUri}
+              value={leftValue}
+              readOnly={leftReadOnly}
+              {...(state.leftDocument === 'minutes' ? { onSave: saveMinutes } : {})}
+              focusToken={leftFocusToken}
+              tabFocusMode={tabFocusMode}
+              commentAnchors={
+                state.leftDocument === 'history' && selected
+                  ? state.view.comments
+                      .filter(
+                        (comment) =>
+                          comment.versionId === selected.id &&
+                          isAnchorValid(selected.content, selected.contentSha256, comment.anchor),
+                      )
+                      .map((comment) => ({
+                        id: comment.id,
+                        start: comment.anchor.start,
+                        end: comment.anchor.end,
+                      }))
+                  : []
+              }
+              onChange={(value) => {
+                if (state.leftDocument === 'minutes') editMinutesDraft(value);
+                else if (state.leftDocument === 'prompt') dispatch({ type: 'editPrompt', value });
+              }}
+            />
           </div>
         </article>
         <article className="editor-pane" data-focus-zone="right" tabIndex={-1}>
@@ -2120,7 +2113,9 @@ const Workspace = ({
                       {override.mode === 'auto' && 'evidence' in item && item.evidence ? (
                         <small>{item.evidence}</small>
                       ) : override.mode === 'manual' ? (
-                        <small>{manualValue.trim() ? `用户确认：${manualValue}` : '等待用户填写'}</small>
+                        <small>
+                          {manualValue.trim() ? `用户确认：${manualValue}` : '等待用户填写'}
+                        </small>
                       ) : override.mode === 'none' ? (
                         <small>用户确认未提供</small>
                       ) : null}
@@ -2152,15 +2147,9 @@ const Workspace = ({
               {sourceLabels[latestTask.configSnapshot.sources.reasoningEffort]}）
             </small>
             {activeTask &&
-              [
-                'queued',
-                'preparing',
-                'requesting',
-                'processing',
-                'reviewing',
-              ].includes(activeTask.status) && (
-                <button onClick={() => setModal('cancel')}>取消任务</button>
-              )}
+              ['queued', 'preparing', 'requesting', 'processing', 'reviewing'].includes(
+                activeTask.status,
+              ) && <button onClick={() => setModal('cancel')}>取消任务</button>}
             {latestTask.error && (
               <p role="alert">
                 {latestTask.error.safeMessage}
@@ -2242,13 +2231,7 @@ const Workspace = ({
       )}
       {modal === 'comment' && (
         <Modal
-          title={
-            isReanchoring
-              ? '重新标定批注'
-              : editingCommentId
-                ? '编辑批注'
-                : '添加批注'
-          }
+          title={isReanchoring ? '重新标定批注' : editingCommentId ? '编辑批注' : '添加批注'}
           onClose={() => {
             setModal(null);
             setEditingCommentId(null);
@@ -2257,9 +2240,7 @@ const Workspace = ({
           }}
         >
           <div className="form-stack">
-              {isReanchoring && (
-              <p>仅替换批注引用的位置，批注正文保持不变。</p>
-            )}
+            {isReanchoring && <p>仅替换批注引用的位置，批注正文保持不变。</p>}
             <blockquote>
               {isReanchoring
                 ? selection?.exact

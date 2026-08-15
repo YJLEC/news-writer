@@ -134,8 +134,7 @@ const cleanTitle = (line: string): string => {
 const looksLikeTitle = (line: string): boolean => {
   const value = cleanTitle(line);
   if (!value || value.length > 500) return false;
-  if (!/^(?:标题|题目)[：:]/u.test(line) && /^(?:正文|新闻稿|落款|日期)/u.test(value))
-    return false;
+  if (!/^(?:标题|题目)[：:]/u.test(line) && /^(?:正文|新闻稿|落款|日期)/u.test(value)) return false;
   if (/[。！？.!?；;]$/u.test(value)) return false;
   return true;
 };

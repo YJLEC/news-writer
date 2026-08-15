@@ -543,7 +543,12 @@ describe('domain workflow', () => {
     const { project, ids, clock } = setupProject();
     const contents = new Map<string, string>();
     const promptText = 'draft with facts';
-    const promptRef = ref('content/prompts/facts-version/0.txt', promptText, contentHash(promptText), 'text/plain');
+    const promptRef = ref(
+      'content/prompts/facts-version/0.txt',
+      promptText,
+      contentHash(promptText),
+      'text/plain',
+    );
     contents.set(promptRef.relativePath, promptText);
     let queued = queueTask(
       project,
@@ -578,12 +583,21 @@ describe('domain workflow', () => {
       runtime,
     );
     const versionText = '标题\n\n正文。';
-    const versionRef = ref('content/versions/facts-version.md', versionText, contentHash(versionText));
+    const versionRef = ref(
+      'content/versions/facts-version.md',
+      versionText,
+      contentHash(versionText),
+    );
     const completed = commitSuccessfulVersion(
       queued,
       { taskId: task.id, contentRef: versionRef, createdAt: clock.now() },
       queued.revision,
-      { readText: (candidate) => (candidate.relativePath === versionRef.relativePath ? versionText : contents.get(candidate.relativePath)) },
+      {
+        readText: (candidate) =>
+          candidate.relativePath === versionRef.relativePath
+            ? versionText
+            : contents.get(candidate.relativePath),
+      },
       runtime,
     );
     expect(completed.versions.at(-1)?.factOverrides).toEqual({

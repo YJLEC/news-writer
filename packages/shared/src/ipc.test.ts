@@ -508,12 +508,10 @@ describe('IPC contracts', () => {
       promptPreparationDtoSchema.safeParse({ ...result, trace: traceWithInvalidHash }).success,
     ).toBe(false);
     expect(
-      promptPreparationDtoSchema
-        .safeParse({
-          ...result,
-          trace: { ...(result.trace as Record<string, unknown>), writingRulesVersion: '' },
-        })
-        .success,
+      promptPreparationDtoSchema.safeParse({
+        ...result,
+        trace: { ...(result.trace as Record<string, unknown>), writingRulesVersion: '' },
+      }).success,
     ).toBe(false);
   });
 
