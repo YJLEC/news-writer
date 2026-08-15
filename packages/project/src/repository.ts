@@ -7,6 +7,7 @@ import {
   containsSecretMaterial,
   projectRelativePathSchema,
   timestampSchema,
+  type ImageArtifactRef,
 } from '@news-writer/shared';
 
 import {
@@ -856,6 +857,27 @@ export class ProjectSession {
     return value.toString('utf8');
   }
 
+  readImage(ref: ImageArtifactRef): Buffer {
+    if (this.#closed)
+      throw new ProjectError('PROJECT_LOCK_COMPROMISED', 'Project session is closed');
+    const aggregate = this.#materialized.aggregate;
+    const authoritative = aggregate.images.find(
+      (image) => image.ref.relativePath === ref.relativePath,
+    );
+    if (
+      authoritative === undefined ||
+      authoritative.ref.sha256 !== ref.sha256 ||
+      authoritative.ref.byteLength !== ref.byteLength
+    ) {
+      throw new ProjectError('PROJECT_PATH_INVALID', 'Image artifact is not owned by this project');
+    }
+    const value = this.#materialized.imageArtifacts.get(ref.relativePath);
+    if (value === undefined)
+      throw new ProjectError('PROJECT_HASH_MISMATCH', 'Project image content is missing');
+    verifyBytes(value, ref.byteLength, ref.sha256);
+    return value;
+  }
+
   get headCommitId(): CommitId {
     return this.#head.headCommitId;
   }
@@ -963,7 +985,7 @@ export const openProject = async (input: OpenProjectInput): Promise<ProjectSessi
   await assertPathHasNoReparsePoint(root, projectRelativePathSchema.parse('.news-writer'));
   await assertPathHasNoReparsePoint(root, projectRelativePathSchema.parse('content'));
   await assertPathHasNoReparsePoint(root, projectRelativePathSchema.parse('records'));
-  await assertPathHasNoReparsePoint(root, projectRelativePathSchema.parse('assets'));
+  await assertPathHasNoReparsePoint(root, projectRelativePathSchema.parse('assets'), true);
   const lock = await ProjectLock.acquire(storageRoot(root), input.appVersion);
   try {
     await probeFileSystemCapabilities(storageRoot(root));

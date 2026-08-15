@@ -1,6 +1,7 @@
 import {
   AlignmentType,
   Document,
+  ImageRun,
   LineRuleType,
   Packer,
   Paragraph,
@@ -286,6 +287,31 @@ const run = (text: string, font: string, size: number, bold = false) =>
     bold,
   });
 
+const imageParagraphs = (input: NewsDocument, style: NewsDocumentStyleTokens): Paragraph[] => {
+  const usableWidthTwips = style.pageWidthTwips - style.marginLeftTwips - style.marginRightTwips;
+  const usableHeightTwips = style.pageHeightTwips - style.marginTopTwips - style.marginBottomTwips;
+  const targetWidthPx = Math.round((usableWidthTwips / 1440) * 96);
+  const targetHeightPx = Math.round((usableHeightTwips / 1440) * 96);
+  return input.images.map((image) => {
+    let widthPx = targetWidthPx;
+    let heightPx = Math.round((widthPx * image.heightPx) / image.widthPx);
+    if (heightPx > targetHeightPx) {
+      heightPx = targetHeightPx;
+      widthPx = Math.round((heightPx * image.widthPx) / image.heightPx);
+    }
+    return new Paragraph({
+      style: 'NewsImage',
+      children: [
+        new ImageRun({
+          type: 'jpg',
+          data: Buffer.from(image.dataBase64, 'base64'),
+          transformation: { width: widthPx, height: heightPx },
+        }),
+      ],
+    });
+  });
+};
+
 export const buildNewsDocx = async (
   raw: NewsDocument,
   rawStyle: Partial<NewsDocumentStyleTokens> = {},
@@ -356,6 +382,23 @@ export const buildNewsDocx = async (
               before: pointsToTwips(style.paragraphSpacingBeforePt),
               after: pointsToTwips(style.paragraphSpacingAfterPt),
               line: lineToTwips(style.lineSpacing),
+              lineRule: LineRuleType.AUTO,
+            },
+          },
+        },
+        {
+          id: 'NewsImage',
+          name: 'NewsImage',
+          basedOn: 'Normal',
+          next: 'NewsImage',
+          quickFormat: false,
+          run: { size: bodySize, bold: false, color: '000000' },
+          paragraph: {
+            alignment: AlignmentType.CENTER,
+            spacing: {
+              before: 0,
+              after: 0,
+              line: lineToTwips(1),
               lineRule: LineRuleType.AUTO,
             },
           },
@@ -451,6 +494,7 @@ export const buildNewsDocx = async (
                 children: [run(text, style.bodyFontFamily, bodySize)],
               }),
           ),
+          ...imageParagraphs(input, style),
           new Paragraph({
             style: 'NewsSignOff',
             children: [run(input.signOff, style.bodyFontFamily, bodySize)],
@@ -480,7 +524,10 @@ export const buildNewsDocx = async (
             /(<w:pStyle w:val="NewsBody"\/>)/gu,
             '$1<w:snapToGrid w:val="0"/><w:overflowPunct w:val="1"/>',
           )
-          .replace(/(<w:pStyle w:val="NewsTitle"\/>)/gu, '$1<w:snapToGrid w:val="0"/>')
+          .replace(
+            /(<w:pStyle w:val="(?:NewsTitle|NewsImage)"\/>)/gu,
+            '$1<w:snapToGrid w:val="0"/>',
+          )
           .replace(
             /(<w:pStyle w:val="(?:NewsSignOff|NewsDate)"\/>)/gu,
             '$1<w:snapToGrid w:val="1"/>',

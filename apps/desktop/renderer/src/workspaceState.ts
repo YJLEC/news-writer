@@ -46,6 +46,13 @@ export interface UiError {
   suggestedAction?: string;
 }
 
+export interface WorkspaceImage {
+  id: string;
+  widthPx: number;
+  heightPx: number;
+  previewDataUrl: string;
+}
+
 export interface WorkspaceState {
   view: ProjectViewDto;
   minutes: DraftState;
@@ -59,6 +66,7 @@ export interface WorkspaceState {
   pendingCommand: string | null;
   error: UiError | null;
   lastTaskEvent: TaskStatusEventDto | null;
+  images: WorkspaceImage[];
 }
 
 export type WorkspaceAction =
@@ -81,7 +89,8 @@ export type WorkspaceAction =
   | { type: 'setAdvanced'; open: boolean }
   | { type: 'command'; name: string | null }
   | { type: 'error'; error: UiError | null }
-  | { type: 'taskEvent'; event: TaskStatusEventDto };
+  | { type: 'taskEvent'; event: TaskStatusEventDto }
+  | { type: 'imagesRefreshed'; images: WorkspaceImage[] };
 
 export const createWorkspaceState = (view: ProjectViewDto): WorkspaceState => ({
   view,
@@ -96,6 +105,7 @@ export const createWorkspaceState = (view: ProjectViewDto): WorkspaceState => ({
   pendingCommand: null,
   error: null,
   lastTaskEvent: null,
+  images: [],
 });
 
 export const workspaceReducer = (
@@ -200,6 +210,8 @@ export const workspaceReducer = (
         return state;
       }
       return { ...state, lastTaskEvent: action.event };
+    case 'imagesRefreshed':
+      return { ...state, images: action.images };
   }
 };
 

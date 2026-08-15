@@ -17,6 +17,7 @@ const document: NewsDocument = {
   signOff: '单位',
   dateText: '2026年8月10日',
   dateStamp: '20260810',
+  images: [],
 };
 const helper = (mode: string) =>
   pathToFileURL(path.resolve(`tests/helpers/document-worker-${mode}.mjs`));

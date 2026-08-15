@@ -61,6 +61,7 @@ const makeView = (): ProjectViewDto =>
     prompts: [],
     tasks: [],
     retrievalReports: [],
+    images: [],
   }) as unknown as ProjectViewDto;
 
 describe('workspace reducer and projections', () => {

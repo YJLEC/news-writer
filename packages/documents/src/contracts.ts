@@ -31,6 +31,14 @@ export const DOCUMENT_MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 
 const bounded = (max: number, min = 1) => z.string().min(min).max(max);
 
+export const imageDocItemSchema = z
+  .object({
+    dataBase64: z.string().trim().min(1).max(1_500_000),
+    widthPx: z.number().int().positive().max(100_000),
+    heightPx: z.number().int().positive().max(100_000),
+  })
+  .strict();
+
 export const newsDocumentSchema = z
   .object({
     title: bounded(500),
@@ -40,6 +48,7 @@ export const newsDocumentSchema = z
     // A user-supplied date may be a valid but non-calendar phrase such as
     // "2026年8月". Keep a separate machine-safe stamp for the file name.
     dateStamp: z.string().regex(/^(?:20\d{6}|unknown)$/u),
+    images: z.array(imageDocItemSchema).max(5).default([]),
   })
   .strict();
 export type NewsDocument = z.infer<typeof newsDocumentSchema>;

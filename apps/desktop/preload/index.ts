@@ -78,6 +78,13 @@ const api: NewsWriterApiV1 = {
   documents: Object.freeze({
     exportWithDialog: async (input) => await invoke(IPC_CHANNELS.documentsExportWithDialog, input),
   }),
+  images: Object.freeze({
+    list: async (input) => await invoke(IPC_CHANNELS.imagesList, input),
+    add: async (input) => await invoke(IPC_CHANNELS.imagesAdd, input),
+    remove: async (input) => await invoke(IPC_CHANNELS.imagesRemove, input),
+    reorder: async (input) => await invoke(IPC_CHANNELS.imagesReorder, input),
+    clear: async (input) => await invoke(IPC_CHANNELS.imagesClear, input),
+  }),
 };
 
 contextBridge.exposeInMainWorld('newsWriter', Object.freeze(api));

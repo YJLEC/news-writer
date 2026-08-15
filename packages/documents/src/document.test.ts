@@ -42,6 +42,34 @@ describe('news DOCX', () => {
     },
   );
 
+  it('embeds images between body and sign-off', async () => {
+    const parsed = parseNewsDocument(await fixture('single-page.md'));
+    parsed.images = [
+      {
+        dataBase64: Buffer.from('fake jpeg payload').toString('base64'),
+        widthPx: 400,
+        heightPx: 300,
+      },
+      {
+        dataBase64: Buffer.from('second jpeg payload').toString('base64'),
+        widthPx: 300,
+        heightPx: 1200,
+      },
+    ];
+    const bytes = await buildNewsDocx(parsed);
+    const audit = await auditNewsDocx(bytes, parsed, ['PROMPT_SENTINEL']);
+    expect(audit.clean).toBe(true);
+    const zip = await JSZip.loadAsync(bytes);
+    const mediaEntries = Object.keys(zip.files).filter(
+      (entry) => /^word\/media\/[0-9a-f]{40}\./.test(entry) && !zip.files[entry]!.dir,
+    );
+    expect(mediaEntries.length).toBe(2);
+    const documentXml = await zip.file('word/document.xml')!.async('string');
+    const stylesXml = await zip.file('word/styles.xml')!.async('string');
+    expect(stylesXml).toContain('w:styleId="NewsImage"');
+    expect((documentXml.match(/<w:pStyle w:val="NewsImage"\/>/gu) ?? []).length).toBe(2);
+  });
+
   it('rejects a compatibility comments part with id zero and body text', async () => {
     const parsed = parseNewsDocument(await fixture('single-page.md'));
     const zip = await JSZip.loadAsync(await buildNewsDocx(parsed));

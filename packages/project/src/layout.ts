@@ -139,11 +139,11 @@ const expectedImagePaths = (
 ): Map<string, { ref: ImageArtifactRef; id: string }> => {
   const expected = new Map<string, { ref: ImageArtifactRef; id: string }>();
   for (const image of project.images) {
-    const expectedPath = `assets/images/${image.id}.jpg`;
-    if (image.ref.relativePath !== expectedPath) {
+    const relativePath = image.ref.relativePath;
+    if (!relativePath.startsWith('assets/images/') || !relativePath.endsWith('.jpg')) {
       throw new ProjectError('PROJECT_PATH_INVALID', 'Image path is inconsistent');
     }
-    expected.set(image.ref.relativePath, { ref: image.ref, id: image.id });
+    expected.set(relativePath, { ref: image.ref, id: image.id });
   }
   return expected;
 };
@@ -245,15 +245,6 @@ export const materializeProjectState = (
   candidates.forEach((candidate) => {
     if (candidate.ref.kind !== 'image') assertNoCredentialMaterial(candidate.bytes);
   });
-  const imageOrder = new Map(project.images.map((image, index) => [image.ref.relativePath, index]));
-  const imageStoredRefs = candidates
-    .filter((candidate) => candidate.ref.kind === 'image')
-    .toSorted(
-      (left, right) =>
-        (imageOrder.get(left.ref.relativePath) ?? 0) -
-        (imageOrder.get(right.ref.relativePath) ?? 0),
-    )
-    .map((candidate) => candidate.ref);
   const state: ProjectStateIndexV1 = {
     project: {
       name: project.name,
@@ -268,6 +259,7 @@ export const materializeProjectState = (
       createdWith: project.createdWith,
       lastWrittenWith: project.lastWrittenWith,
       projectConfig: project.projectConfig,
+      images: project.images,
     },
     currentMinutes: minutes.ref,
     latestVersionId: project.latestVersionId,
@@ -277,7 +269,6 @@ export const materializeProjectState = (
     comments: comments.map((value) => value.ref),
     retrievalReports: retrievalReports.map((value) => value.ref),
     exportRecords: exportRecords.map((value) => value.ref),
-    images: imageStoredRefs,
   };
   assertNoCredentialMaterial(serializeJson(state.project));
   return { state, candidates, suppliedArtifacts };

@@ -8,6 +8,7 @@ const document: NewsDocument = {
   signOff: 'News Writer',
   dateText: '2026年8月11日',
   dateStamp: '20260811',
+  images: [],
 };
 
 void runner

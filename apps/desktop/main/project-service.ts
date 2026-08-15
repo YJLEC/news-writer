@@ -2,13 +2,17 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import {
   addComment,
+  addImages,
   archiveProject,
+  clearImages,
   createProject,
   deleteComment,
   editComment,
   checkMissingFacts,
   recordExport,
   recordRetrieval,
+  removeImage,
+  reorderImages,
   fingerprintCommentSnapshot,
   orderCommentSnapshots,
   preparePrompt as buildPrompt,
@@ -59,6 +63,8 @@ import {
 import {
   commentIdSchema,
   exportRecordIdSchema,
+  imageArtifactRefSchema,
+  imageIdSchema,
   retrievalReportIdSchema,
   containsSecretMaterial,
   projectRelativePathSchema,
@@ -68,6 +74,7 @@ import {
   textArtifactRefSchema,
   timestampSchema,
   type IdGenerator,
+  type ImageArtifactRef,
   type RuntimeVersionSnapshot,
   type TextArtifactRef,
 } from '@news-writer/shared';
@@ -75,13 +82,19 @@ import {
   projectLockRecoveryDescriptorSchema,
   sessionIdSchema,
   type AddCommentDto,
+  type AddImagesDto,
+  type ClearImagesDto,
   type CreateProjectDto,
   type DeleteCommentDto,
   type EditCommentDto,
   type ExportDocumentDto,
   type ExportDocumentResultDto,
   type ExportRecordViewDto,
+  type ImagesListDto,
+  type ImagesListResultDto,
   type ProjectViewDto,
+  type RemoveImageDto,
+  type ReorderImagesDto,
   type SaveMinutesDto,
   type SessionId,
   type SessionRequest,
@@ -155,6 +168,21 @@ const artifact = (
     encoding: 'utf-8',
   });
 };
+
+const imageArtifact = (
+  relativePath: string,
+  bytes: Uint8Array,
+  widthPx: number,
+  heightPx: number,
+): ImageArtifactRef =>
+  imageArtifactRefSchema.parse({
+    relativePath: projectRelativePathSchema.parse(relativePath),
+    sha256: sha256Schema.parse(createHash('sha256').update(bytes).digest('hex')),
+    byteLength: bytes.byteLength,
+    mediaType: 'image/jpeg',
+    widthPx,
+    heightPx,
+  });
 
 const isActiveTask = (project: ProjectAggregateV1): boolean =>
   project.tasks.some(
@@ -347,6 +375,11 @@ export class ProjectService {
         currentVersion.contentRef.sha256 !== version.contentRef.sha256
       )
         throw new SafeMainError(this.#conflict());
+      document.images = current.images.map((image) => ({
+        dataBase64: currentOwned.project.readImage(image.ref).toString('base64'),
+        widthPx: image.ref.widthPx,
+        heightPx: image.ref.heightPx,
+      }));
       const attemptedAt = systemClock.now();
       const id = exportRecordIdSchema.parse(ids.next('exportRecord'));
       const fileName = (await import('node:path')).basename(target);
@@ -724,6 +757,73 @@ export class ProjectService {
         systemClock.now(),
         this.#runtime,
       ),
+    }));
+  }
+
+  async imagesList(input: ImagesListDto, ownerId: number): Promise<ImagesListResultDto> {
+    return await this.#gate.run(() => {
+      const owned = this.#owned(input.sessionId, ownerId);
+      const current = owned.project.read();
+      const images = current.images.map((image) => ({
+        id: image.id,
+        widthPx: image.ref.widthPx,
+        heightPx: image.ref.heightPx,
+        previewDataUrl: `data:image/jpeg;base64,${owned.project
+          .readImage(image.ref)
+          .toString('base64')}`,
+      }));
+      return Promise.resolve({ sessionId: input.sessionId, revision: current.revision, images });
+    });
+  }
+
+  async imagesAdd(input: AddImagesDto, ownerId: number): Promise<ProjectViewDto> {
+    return await this.#mutate(input, ownerId, (_owned, current) => {
+      const artifacts = new Map<string, Uint8Array>();
+      const refs = input.items.map((item) => {
+        const bytes = new Uint8Array(Buffer.from(item.dataBase64, 'base64'));
+        if (bytes.byteLength === 0 || bytes.byteLength > 1_200_000) {
+          throw new SafeMainError(this.#contentInvalid());
+        }
+        const relativePath = `assets/images/${randomUUID()}.jpg`;
+        artifacts.set(relativePath, bytes);
+        return imageArtifact(relativePath, bytes, item.widthPx, item.heightPx);
+      });
+      const next = addImages(current, refs, input.expectedRevision, {
+        ids: { next: () => randomUUID() },
+        clock: systemClock,
+        runtime: this.#runtime,
+      });
+      return { next, artifacts };
+    });
+  }
+
+  async imagesRemove(input: RemoveImageDto, ownerId: number): Promise<ProjectViewDto> {
+    return await this.#mutate(input, ownerId, (_owned, current) => ({
+      next: removeImage(
+        current,
+        imageIdSchema.parse(input.imageId),
+        input.expectedRevision,
+        systemClock.now(),
+        this.#runtime,
+      ),
+    }));
+  }
+
+  async imagesReorder(input: ReorderImagesDto, ownerId: number): Promise<ProjectViewDto> {
+    return await this.#mutate(input, ownerId, (_owned, current) => ({
+      next: reorderImages(
+        current,
+        imageIdSchema.array().parse([...input.orderedIds]),
+        input.expectedRevision,
+        systemClock.now(),
+        this.#runtime,
+      ),
+    }));
+  }
+
+  async imagesClear(input: ClearImagesDto, ownerId: number): Promise<ProjectViewDto> {
+    return await this.#mutate(input, ownerId, (_owned, current) => ({
+      next: clearImages(current, input.expectedRevision, systemClock.now(), this.#runtime),
     }));
   }
 
@@ -1162,7 +1262,8 @@ export class ProjectService {
   ): void {
     const values = [JSON.stringify(aggregate)];
     for (const value of artifacts?.values() ?? []) {
-      values.push(typeof value === 'string' ? value : Buffer.from(value).toString('utf8'));
+      if (typeof value !== 'string') continue;
+      values.push(value);
     }
     this.#assertStringsSafe(values, exactSecret);
   }
@@ -1343,6 +1444,11 @@ export class ProjectService {
         hitCount: report.hits.length,
       })),
       exportRecords: project.exportRecords.map(exportRecordView),
+      images: project.images.map((image) => ({
+        id: image.id,
+        widthPx: image.ref.widthPx,
+        heightPx: image.ref.heightPx,
+      })),
     };
   }
 

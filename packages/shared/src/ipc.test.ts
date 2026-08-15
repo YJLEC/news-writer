@@ -27,6 +27,7 @@ const ids = {
   recovery: '00000000-0000-4000-8000-000000000010',
   lockInstance: '00000000-0000-4000-8000-000000000011',
   export: '00000000-0000-4000-8000-000000000012',
+  image: '00000000-0000-4000-8000-000000000013',
 } as const;
 const at = '2026-08-09T01:02:03.123Z';
 const anchor = {
@@ -164,6 +165,7 @@ const project = {
     },
   ],
   exportRecords: [],
+  images: [],
 } as const;
 
 const requests: Record<string, unknown> = {
@@ -231,6 +233,14 @@ const requests: Record<string, unknown> = {
   },
   [IPC_CHANNELS.tasksCancel]: { ...session, taskId: ids.task },
   [IPC_CHANNELS.documentsExportWithDialog]: { ...session, versionId: ids.version },
+  [IPC_CHANNELS.imagesList]: { sessionId: ids.session },
+  [IPC_CHANNELS.imagesAdd]: {
+    ...session,
+    items: [{ dataBase64: 'aGVsbG8=', widthPx: 100, heightPx: 50 }],
+  },
+  [IPC_CHANNELS.imagesRemove]: { ...session, imageId: ids.image },
+  [IPC_CHANNELS.imagesReorder]: { ...session, orderedIds: [ids.image] },
+  [IPC_CHANNELS.imagesClear]: { ...session },
 };
 
 const data: Record<string, unknown> = {
@@ -317,13 +327,29 @@ const data: Record<string, unknown> = {
       byteLength: 1024,
     },
   },
+  [IPC_CHANNELS.imagesList]: {
+    sessionId: ids.session,
+    revision: 0,
+    images: [
+      {
+        id: ids.image,
+        widthPx: 100,
+        heightPx: 50,
+        previewDataUrl: 'data:image/jpeg;base64,aGVsbG8=',
+      },
+    ],
+  },
+  [IPC_CHANNELS.imagesAdd]: project,
+  [IPC_CHANNELS.imagesRemove]: project,
+  [IPC_CHANNELS.imagesReorder]: project,
+  [IPC_CHANNELS.imagesClear]: project,
 };
 
 describe('IPC contracts', () => {
   it('has a unique, fixed channel for every invoke and event', () => {
     const names = Object.values(IPC_CHANNELS);
     expect(new Set(names).size).toBe(names.length);
-    expect(Object.keys(IPC_INVOKE_CONTRACTS)).toHaveLength(26);
+    expect(Object.keys(IPC_INVOKE_CONTRACTS)).toHaveLength(31);
     expect(Object.keys(IPC_EVENT_CONTRACTS)).toEqual([IPC_CHANNELS.tasksStatusEvent]);
     expect(names.every((name) => name.startsWith('nw:v1:'))).toBe(true);
   });

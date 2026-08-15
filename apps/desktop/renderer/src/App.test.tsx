@@ -80,6 +80,7 @@ const view = {
   tasks: [],
   retrievalReports: [],
   exportRecords: [],
+  images: [],
 } as unknown as ProjectViewDto;
 
 const commentedView = {
@@ -244,6 +245,13 @@ const api = () => ({
     exportWithDialog: vi.fn<NewsWriterApiV1['documents']['exportWithDialog']>(async () =>
       ok({ cancelled: true as const }),
     ),
+  },
+  images: {
+    list: vi.fn(async () => ok({ sessionId, revision: 0, images: [] })),
+    add: vi.fn(async () => ok(view)),
+    remove: vi.fn(async () => ok(view)),
+    reorder: vi.fn(async () => ok(view)),
+    clear: vi.fn(async () => ok(view)),
   },
 });
 

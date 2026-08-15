@@ -1,11 +1,14 @@
 import './app.css';
 
 import {
+  ArrowDown,
+  ArrowUp,
   BookOpen,
   FilePlus2,
   Download,
   FolderOpen,
   GitCompare,
+  ImagePlus,
   KeyRound,
   MessageSquare,
   PanelLeft,
@@ -13,6 +16,7 @@ import {
   RotateCcw,
   Save,
   Settings,
+  Trash2,
   X,
 } from 'lucide-react';
 import { Component, useCallback, useEffect, useReducer, useRef, useState } from 'react';
@@ -29,6 +33,7 @@ import type {
 
 import { MonacoDiffEditor, MonacoTextEditor } from './MonacoEditor';
 import { MonacoDiagnostic } from './MonacoDiagnostic';
+import { compressImage } from './imageCompress';
 import {
   createWorkspaceState,
   isAnchorValid,
@@ -127,6 +132,8 @@ const errorMessage = (code: string): string => {
     EXPORT_DISK_FULL: '磁盘空间不足，DOCX 未导出。',
     EXPORT_ATOMIC_REPLACE_FAILED: '目标文件正被占用，原文件保持不变。',
     EXPORT_IO_ERROR: 'DOCX 写入或校验失败，原有版本未受影响。',
+    IMAGE_LIMIT: '最多 5 张图片。',
+    IMAGE_INVALID: '图片无法读取或压缩，请换一张图片。',
   };
   return messages[code] ?? '操作未完成，请根据下方诊断编号重试或联系维护人员。';
 };
@@ -907,6 +914,7 @@ const Workspace = ({
   const commandQueueRef = useRef<Promise<void>>(Promise.resolve());
   const commandPendingRef = useRef(false);
   const [systemOpen, setSystemOpen] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const minutesAutosaveTimerRef = useRef<number | null>(null);
   const editMinutesDraft = (value: string): void => {
     const action = { type: 'editMinutes' as const, value };
@@ -1013,6 +1021,35 @@ const Workspace = ({
     if (refreshSignal > 0) hydrate();
   }, [hydrate, refreshSignal]);
 
+  const refreshImages = useCallback(async (): Promise<void> => {
+    const result = await window.newsWriter.images.list({
+      sessionId: stateRef.current.view.sessionId,
+    });
+    if (!result.ok) throw new IpcFailure(result.error);
+    if (result.data.sessionId !== stateRef.current.view.sessionId) return;
+    dispatch({ type: 'imagesRefreshed', images: result.data.images });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await window.newsWriter.images.list({
+          sessionId: stateRef.current.view.sessionId,
+        });
+        if (cancelled) return;
+        if (result.ok && result.data.sessionId === stateRef.current.view.sessionId) {
+          dispatch({ type: 'imagesRefreshed', images: result.data.images });
+        }
+      } catch {
+        // Initial image list load is best-effort; the panel simply stays empty.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const latest =
     state.view.versions.find((version) => version.id === state.view.latestVersionId) ?? null;
   const selected =
@@ -1028,6 +1065,8 @@ const Workspace = ({
     ? state.view.comments.filter((comment) => comment.versionId === focusedVersion.id)
     : [];
   const isReanchoring = reanchorCommentId !== null && reanchorCommentId === editingCommentId;
+  const imagesDisabled =
+    Boolean(activeTask) || state.view.status === 'archived' || Boolean(state.pendingCommand);
 
   const previewSessionId = state.view.sessionId;
   const previewRevision = state.view.revision;
@@ -1463,6 +1502,104 @@ const Workspace = ({
         dispatch({ type: 'setPrompt', prompt: { ...stateRef.current.prompt, stale: true } });
     });
 
+  const onImagesSelected = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (files.length === 0) return;
+    const remaining = 5 - stateRef.current.images.length;
+    if (files.length > remaining) {
+      dispatch({
+        type: 'error',
+        error: { code: 'IMAGE_LIMIT', safeMessage: errorMessage('IMAGE_LIMIT') },
+      });
+      return;
+    }
+    enqueue('image-add', async () => {
+      const current = stateRef.current;
+      const items: Array<{ dataBase64: string; widthPx: number; heightPx: number }> = [];
+      for (const file of files) {
+        try {
+          const compressed = await compressImage(file);
+          items.push({
+            dataBase64: compressed.dataBase64,
+            widthPx: compressed.widthPx,
+            heightPx: compressed.heightPx,
+          });
+        } catch {
+          throw new IpcFailure({ code: 'IMAGE_INVALID' });
+        }
+      }
+      const view = unwrap(
+        await window.newsWriter.images.add({
+          sessionId: current.view.sessionId,
+          expectedRevision: current.view.revision,
+          items,
+        }),
+      );
+      dispatch({ type: 'replaceView', view });
+      await refreshImages();
+    });
+  };
+
+  const removeImage = (imageId: string): void =>
+    enqueue('image-remove', async () => {
+      const current = stateRef.current;
+      const view = unwrap(
+        await window.newsWriter.images.remove({
+          sessionId: current.view.sessionId,
+          expectedRevision: current.view.revision,
+          imageId: imageId as never,
+        }),
+      );
+      dispatch({ type: 'replaceView', view });
+      await refreshImages();
+    });
+
+  const moveImage = (imageId: string, direction: -1 | 1): void => {
+    const current = stateRef.current;
+    const index = current.images.findIndex((image) => image.id === imageId);
+    if (index < 0) return;
+    const target = index + direction;
+    if (target < 0 || target >= current.images.length) return;
+    const orderedIds = current.images.map((image) => image.id);
+    const [moved] = orderedIds.splice(index, 1);
+    if (moved === undefined) return;
+    orderedIds.splice(target, 0, moved);
+    enqueue('image-reorder', async () => {
+      const latest = stateRef.current;
+      const view = unwrap(
+        await window.newsWriter.images.reorder({
+          sessionId: latest.view.sessionId,
+          expectedRevision: latest.view.revision,
+          orderedIds: orderedIds as never,
+        }),
+      );
+      dispatch({ type: 'replaceView', view });
+      await refreshImages();
+    });
+  };
+
+  const clearImages = (): void => {
+    requestConfirmation(
+      '清空图片',
+      '确定清空当前项目的全部图片？此操作无法撤销。',
+      '清空图片',
+      () =>
+        enqueue('image-clear', async () => {
+          const current = stateRef.current;
+          const view = unwrap(
+            await window.newsWriter.images.clear({
+              sessionId: current.view.sessionId,
+              expectedRevision: current.view.revision,
+            }),
+          );
+          dispatch({ type: 'replaceView', view });
+          await refreshImages();
+        }),
+      true,
+    );
+  };
+
   const cancelTask = (): void => {
     if (!activeTask) return;
     enqueue('cancel-task', async () => {
@@ -1608,6 +1745,83 @@ const Workspace = ({
               setLatest={setLatest}
               activeTask={Boolean(activeTask)}
             />
+            <section className="images-panel" aria-labelledby="images-heading">
+              <div className="images-heading">
+                <h3 id="images-heading">图片</h3>
+                <small>{state.images.length}/5</small>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png"
+                multiple
+                hidden
+                onChange={onImagesSelected}
+              />
+              <div className="images-actions">
+                <button
+                  disabled={imagesDisabled || state.images.length >= 5}
+                  title={
+                    state.images.length >= 5 ? '最多 5 张图片' : '选择 JPEG/PNG 图片添加到项目'
+                  }
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <ImagePlus size={15} />
+                  添加图片
+                </button>
+                <button
+                  className="danger"
+                  disabled={imagesDisabled || state.images.length === 0}
+                  title="清空全部图片"
+                  onClick={clearImages}
+                >
+                  <Trash2 size={15} />
+                  清空
+                </button>
+              </div>
+              {state.images.length >= 5 && <p className="images-limit">最多 5 张图片</p>}
+              {state.images.length === 0 ? (
+                <p className="empty-note">尚无图片。</p>
+              ) : (
+                <ol className="images-list">
+                  {state.images.map((image, index) => (
+                    <li key={image.id}>
+                      <img src={image.previewDataUrl} alt={`第 ${index + 1} 张图片`} />
+                      <span className="images-item-meta">
+                        {image.widthPx}×{image.heightPx}
+                      </span>
+                      <div className="images-item-actions">
+                        <button
+                          disabled={imagesDisabled || index === 0}
+                          aria-label={`上移第 ${index + 1} 张图片`}
+                          title="上移"
+                          onClick={() => moveImage(image.id, -1)}
+                        >
+                          <ArrowUp size={15} />
+                        </button>
+                        <button
+                          disabled={imagesDisabled || index === state.images.length - 1}
+                          aria-label={`下移第 ${index + 1} 张图片`}
+                          title="下移"
+                          onClick={() => moveImage(image.id, 1)}
+                        >
+                          <ArrowDown size={15} />
+                        </button>
+                        <button
+                          className="danger"
+                          disabled={imagesDisabled}
+                          aria-label={`删除第 ${index + 1} 张图片`}
+                          title="删除"
+                          onClick={() => removeImage(image.id)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
             <section className="export-history" aria-labelledby="export-history-heading">
               <h3 id="export-history-heading">导出记录</h3>
               {state.view.exportRecords.length === 0 ? (

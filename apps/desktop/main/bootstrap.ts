@@ -251,6 +251,16 @@ export const startDesktop = (workerRunner: WorkerRunner): void => {
         await taskHost!.cancel(input as never, ownerId),
       [IPC_CHANNELS.documentsExportWithDialog]: async (input, ownerId) =>
         await projectService!.exportDocumentWithDialog(input as never, ownerId),
+      [IPC_CHANNELS.imagesList]: async (input, ownerId) =>
+        await projectService!.imagesList(input as never, ownerId),
+      [IPC_CHANNELS.imagesAdd]: async (input, ownerId) =>
+        await projectService!.imagesAdd(input as never, ownerId),
+      [IPC_CHANNELS.imagesRemove]: async (input, ownerId) =>
+        await projectService!.imagesRemove(input as never, ownerId),
+      [IPC_CHANNELS.imagesReorder]: async (input, ownerId) =>
+        await projectService!.imagesReorder(input as never, ownerId),
+      [IPC_CHANNELS.imagesClear]: async (input, ownerId) =>
+        await projectService!.imagesClear(input as never, ownerId),
     };
 
     mainWindow = createMainWindow({

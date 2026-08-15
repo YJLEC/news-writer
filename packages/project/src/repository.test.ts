@@ -902,6 +902,7 @@ describe('project repository', () => {
     const manual = new ProjectSession(target, `manual-${randomUUID()}`, lock, tamperedHead, {
       aggregate: secretAggregate,
       textArtifacts: new Map([[secretRef.relativePath, Buffer.from(secretText, 'utf8')]]),
+      imageArtifacts: new Map(),
     });
     const next = updateProjectConfig(
       secretAggregate,

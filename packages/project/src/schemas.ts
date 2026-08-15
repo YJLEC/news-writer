@@ -2,6 +2,7 @@ import {
   commentRecordSchema,
   exportRecordSchema,
   generationConfigOverridesSchema,
+  imageAttachmentSchema,
   minutesSnapshotSchema,
   projectProfileSchema,
   projectStatusSchema,
@@ -80,6 +81,7 @@ export const projectMetadataV1Schema = z
     createdWith: runtimeVersionSnapshotSchema,
     lastWrittenWith: runtimeVersionSnapshotSchema,
     projectConfig: generationConfigOverridesSchema,
+    images: z.array(imageAttachmentSchema).max(5),
   })
   .strict();
 
@@ -94,7 +96,6 @@ export const projectStateIndexV1Schema = z
     comments: z.array(storedObjectRefSchema),
     retrievalReports: z.array(storedObjectRefSchema),
     exportRecords: z.array(storedObjectRefSchema),
-    images: z.array(storedObjectRefSchema),
   })
   .strict();
 

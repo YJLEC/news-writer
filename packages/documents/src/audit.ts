@@ -102,6 +102,9 @@ const compatibilityOnlyParts = new Set([
   'word/_rels/comments.xml.rels',
 ]);
 
+const isMediaPart = (entry: string): boolean =>
+  /^word\/media\/[0-9a-f]{40}\.(?:jpeg|jpg|png)$/u.test(entry);
+
 const emptyCommentsXml =
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:comments xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:cx1="http://schemas.microsoft.com/office/drawing/2015/9/8/chartex" xmlns:cx2="http://schemas.microsoft.com/office/drawing/2015/10/21/chartex" xmlns:cx3="http://schemas.microsoft.com/office/drawing/2016/5/9/chartex" xmlns:cx4="http://schemas.microsoft.com/office/drawing/2016/5/10/chartex" xmlns:cx5="http://schemas.microsoft.com/office/drawing/2016/5/11/chartex" xmlns:cx6="http://schemas.microsoft.com/office/drawing/2016/5/12/chartex" xmlns:cx7="http://schemas.microsoft.com/office/drawing/2016/5/13/chartex" xmlns:cx8="http://schemas.microsoft.com/office/drawing/2016/5/14/chartex" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:aink="http://schemas.microsoft.com/office/drawing/2016/ink" xmlns:am3d="http://schemas.microsoft.com/office/drawing/2017/model3d" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" xmlns:w16cex="http://schemas.microsoft.com/office/word/2018/wordml/cex" xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid" xmlns:w16="http://schemas.microsoft.com/office/word/2018/wordml" xmlns:w16sdtdh="http://schemas.microsoft.com/office/word/2020/wordml/sdtdatahash" xmlns:w16se="http://schemas.microsoft.com/office/word/2015/wordml/symex" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"/>';
 
@@ -120,7 +123,12 @@ const fixedNotesXml = (kind: 'footnote' | 'endnote'): string => {
 export const auditDocxCompatibilitySource = async (bytes: Uint8Array): Promise<void> => {
   const zip = await JSZip.loadAsync(bytes, { checkCRC32: true });
   const entries = Object.keys(zip.files).filter((entry) => !zip.files[entry]!.dir);
-  if (entries.some((entry) => !allowedParts.has(entry) && !compatibilityOnlyParts.has(entry)))
+  if (
+    entries.some(
+      (entry) =>
+        !allowedParts.has(entry) && !compatibilityOnlyParts.has(entry) && !isMediaPart(entry),
+    )
+  )
     throw new Error('DOCX source package contains an unexpected part');
   if (![...compatibilityOnlyParts].every((entry) => entries.includes(entry)))
     throw new Error('DOCX source compatibility parts changed');
@@ -157,10 +165,12 @@ export const auditNewsDocx = async (
     'word/styles.xml',
     'word/settings.xml',
   ];
+  const mediaEntries = entries.filter(isMediaPart);
   if (
     required.some((entry) => !entries.includes(entry)) ||
-    entries.some((entry) => !allowedParts.has(entry)) ||
-    entries.length !== allowedParts.size
+    entries.some((entry) => !allowedParts.has(entry) && !isMediaPart(entry)) ||
+    entries.length !== allowedParts.size + mediaEntries.length ||
+    mediaEntries.length !== expected.images.length
   )
     throw new Error('DOCX package contains invalid parts');
   const xmlEntries = entries.filter((entry) => entry.endsWith('.xml') || entry.endsWith('.rels'));
@@ -189,6 +199,7 @@ export const auditNewsDocx = async (
       const attributes = match[1] ?? '';
       const type = /\bType="([^"]+)"/u.exec(attributes)?.[1];
       const target = /\bTarget="([^"]+)"/u.exec(attributes)?.[1];
+      if (type !== undefined && /\/image$/u.test(type) && target?.startsWith('media/')) continue;
       if (!type || !target || allowedRelationship.get(type) !== target)
         throw new Error('DOCX relationship is not allowed');
     }
@@ -283,9 +294,13 @@ export const auditNewsDocx = async (
   assertTokens(styleBlock('NewsBody'), [/w:lineRule="auto"/u], 'body line rule');
   if (
     (documentXml.match(/<w:snapToGrid w:val="0"\/>/gu) ?? []).length !==
-    expected.bodyParagraphs.length + 1
+    expected.bodyParagraphs.length + 1 + expected.images.length
   )
-    throw new Error('DOCX title and body paragraphs do not disable grid snapping');
+    throw new Error('DOCX title, body, and image paragraphs do not disable grid snapping');
+  if (
+    (documentXml.match(/<w:pStyle w:val="NewsImage"\/>/gu) ?? []).length !== expected.images.length
+  )
+    throw new Error('DOCX image paragraph count is invalid');
   if ((documentXml.match(/<w:snapToGrid w:val="1"\/>/gu) ?? []).length !== 2)
     throw new Error('DOCX sign-off and date paragraphs do not snap to the document grid');
   if (
